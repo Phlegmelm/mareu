@@ -38,7 +38,8 @@ AI layer, sessions, REPL) — **cross-platform on Linux, macOS, and Windows**
   context, export/import, and an active-session pointer.
 - **REPL** — rustyline loop with slash-commands (`/recon`, `/analyze`,
   `/scaffold`, `/load`, `/context`, `/ai`, `/model`, `/provider`, `/prompt`,
-  `/note`, `/export`, …).
+  `/note`, `/export`, …), with **Tab completion** for commands and file paths,
+  plus history and reverse-search.
 - **Output** — colored box-drawing text, markdown, and a stable JSON schema
   (see `docs/json-schema.md`); honors `--no-color`/`NO_COLOR`/tty; streaming.
 - **Config** — 5-layer precedence, `${ENV}` interpolation, secret masking.
@@ -62,6 +63,5 @@ AI layer, sessions, REPL) — **cross-platform on Linux, macOS, and Windows**
 - `report` supports markdown only (html/pdf pending).
 - MCP server uses stdio; the HTTP/SSE transport (`--port`) and the ambient
   Claude-Code provider are not yet implemented (RFC v0.5).
-- REPL tab-completion is basic (history + reverse-search).
 - egghunter/loader asm are correct-by-shape scaffolds requiring on-target
   syscall/badchar verification, per the SCAFFOLD contract.

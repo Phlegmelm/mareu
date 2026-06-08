@@ -5,6 +5,7 @@
 //! tooling. Readline history and reverse-search come from rustyline.
 
 mod commands;
+mod complete;
 
 use crate::cli::shell::ShellArgs;
 use crate::cli::Ctx;
@@ -14,7 +15,6 @@ use crate::provider::Message;
 use crate::session::Store;
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
 
 struct State {
     session: Option<String>,
@@ -62,7 +62,7 @@ pub async fn run(ctx: &Ctx, args: &ShellArgs) -> Result<i32> {
     }
     println!("  {}", p.paint(DIM, "type /help for commands, /exit to quit"));
 
-    let mut rl = DefaultEditor::new()?;
+    let mut rl = complete::editor()?;
 
     loop {
         let prompt = make_prompt(ctx, &state);
