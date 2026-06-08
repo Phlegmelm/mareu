@@ -1,0 +1,71 @@
+# Mareu default configuration.
+#
+# This file documents every key and its default. Copy it to your user config
+# (`mareu config edit`) and change only what you need — omitted keys fall back
+# to these values. Resolution order (later wins): defaults -> user config ->
+# ./.mareu.toml -> MAREU_* env vars -> CLI flags.
+
+[provider]
+# Active provider. Keyless `ollama` is the default so a fresh install works
+# fully offline. Set to "openrouter"/"anthropic"/"openai" once a key is present.
+default = "ollama"
+
+[provider.openrouter]
+api_key  = "${OPENROUTER_API_KEY}"      # env-var interpolation
+model    = "anthropic/claude-sonnet-4-5"
+base_url = "https://openrouter.ai/api/v1"
+timeout  = 60
+
+[provider.anthropic]
+api_key  = "${ANTHROPIC_API_KEY}"
+model    = "claude-sonnet-4-5"
+base_url = "https://api.anthropic.com"
+timeout  = 60
+
+[provider.openai]
+api_key  = "${OPENAI_API_KEY}"
+model    = "gpt-4o"
+base_url = "https://api.openai.com/v1"   # override for any OpenAI-compatible endpoint
+timeout  = 60
+
+[provider.ollama]
+# Local; no key; works air-gapped.
+model    = "llama3.1:8b"
+base_url = "http://localhost:11434"
+timeout  = 120
+
+[ai]
+default     = false      # set true to enable AI without the --ai flag (use --no-ai to override)
+max_tokens  = 8192
+temperature = 0.2        # low temp for analysis; bump for creative scaffolding
+fallback    = ""         # provider to fall back to on rate-limit/error ("" = none)
+
+[output]
+format       = "text"    # text | markdown | json
+color        = true
+pager        = true      # pipe long output through $PAGER
+no_color_env = true      # respect the NO_COLOR standard
+
+[banner]
+style = "full"           # full | compact | none
+
+[context]
+max_tokens    = 100000
+include_stdin = true     # auto-include stdin when piped
+
+[session]
+store_path = ""          # "" = platform data dir; supports ~ and ${ENV}
+auto_save  = true
+
+[scaffold]
+unsafe_default = false   # require --unsafe for aggressive output
+header_comment = true    # include the machine-readable scaffold header
+
+[analysis]
+# Patterns flagged as interesting during static surface mapping.
+flag_patterns = [
+    "memcpy", "strcpy", "strcat", "sprintf", "gets", "recv", "read",
+    "mmap", "malloc", "realloc", "alloca", "free", "strlen", "system",
+    "exec", "popen",
+]
+pre_auth_markers = ["before_auth", "unauthenticated", "anon", "pre_auth"]

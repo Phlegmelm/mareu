@@ -1,0 +1,59 @@
+# Vulnerability Report — {{vuln}}
+
+**Class:** {{class}}
+**Arch/Target:** {{arch}}
+**Status:** DRAFT — verify all claims before disclosure
+
+---
+
+## Executive Summary
+
+_One paragraph: what the bug is, where it lives, and the impact in plain terms.
+State whether it is pre-auth and remotely reachable._
+
+## Affected
+
+| Field | Value |
+|-------|-------|
+| Component | TODO |
+| Version(s) | TODO |
+| CWE | TODO |
+| CVSS 3.1 | TODO (vector: `CVSS:3.1/AV:?/AC:?/PR:?/UI:?/S:?/C:?/I:?/A:?`) |
+
+## Technical Detail
+
+_Root cause. Reference the exact file and line. Explain the primitive
+(out-of-bounds write / read / UAF / type confusion) and how attacker input
+reaches it._
+
+## Reproduction
+
+1. TODO — environment / build
+2. TODO — trigger
+3. TODO — observed crash / behavior (ASAN output, `$pc`, etc.)
+
+```
+<paste reproducer output here>
+```
+
+## Impact
+
+_What an attacker gains: code execution, info leak, DoS. Note reliability and
+preconditions (leak primitive, ASLR/PIE assumptions)._
+
+## Suggested Remediation
+
+_Concrete patch vector — the minimal correct fix, not a workaround._
+
+## Timeline
+
+| Date | Event |
+|------|-------|
+| TODO | Reported to vendor |
+| TODO | Vendor acknowledged |
+| TODO | Fix released |
+| TODO | Public disclosure |
+
+## Credits
+
+_Researcher name / handle. Coordinated disclosure per vendor policy._

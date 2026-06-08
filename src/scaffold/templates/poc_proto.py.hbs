@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+# Protocol fuzzing / malformed-message scaffold
+# vuln: {{vuln}}
+# class: {{class}}  arch: {{arch}}
+#
+# A connection-driven harness for protocol bugs: build well-formed frames, then
+# mutate one field at a time. Wire up _build_frame() to the real wire format and
+# point HOST/PORT at your *authorized* test target.
+
+import socket
+import struct
+import sys
+import os
+import random
+
+HOST = os.environ.get("TARGET_HOST", "127.0.0.1")   # HOST_TODO: test target only
+PORT = int(os.environ.get("TARGET_PORT", "0"))       # PORT_TODO
+
+def _build_frame(payload: bytes, *, dialect: int = 0x0311) -> bytes:
+    """TODO: replace with the real framing.
+
+    Example sketch (length-prefixed TLV): [u32 len][u16 type][u16 dialect][body]
+    """
+    body = struct.pack("<H", dialect) + payload
+    header = struct.pack("<IH", len(body), 0x0001)
+    return header + body
+
+def _send(frame: bytes, timeout: float = 3.0) -> bytes:
+    with socket.create_connection((HOST, PORT), timeout=timeout) as s:
+        s.sendall(frame)
+        try:
+            return s.recv(65535)
+        except socket.timeout:
+            return b""
+
+def mutations(seed: bytes):
+    """Yield (label, mutated_payload). Extend with your field mutators."""
+    yield "baseline", seed
+    yield "oversized", seed + b"A" * 0x4000          # length / bounds
+    yield "zero-len", b""                            # empty body
+    yield "bad-dialect", seed                        # see dialect kwarg below
+    for i in range(len(seed)):                       # single-byte bitflips
+        m = bytearray(seed); m[i] ^= 0xFF
+        yield f"flip@{i}", bytes(m)
+
+def main():
+    if PORT == 0:
+        sys.exit("set TARGET_HOST/TARGET_PORT (authorized test target only)")
+    seed = bytes(random.getrandbits(8) for _ in range(32))   # SEED_TODO
+    for label, payload in mutations(seed):
+        dialect = 0xFFFF if label == "bad-dialect" else 0x0311
+        frame = _build_frame(payload, dialect=dialect)
+        try:
+            resp = _send(frame)
+            print(f"[{label:>12}] sent {len(frame):>5}B -> {len(resp):>5}B")
+        except (ConnectionError, OSError) as e:
+            # A dropped/refused connection often means a crash worth a closer look.
+            print(f"[{label:>12}] EXCEPTION: {e}  <-- investigate")
+
+if __name__ == "__main__":
+    main()

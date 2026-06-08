@@ -1,0 +1,13 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# Mareu scaffold output directories
+mareu_scaffold_*/
+
+# local project config / editor cruft
+.mareu.toml
+.DS_Store
+
+# local Claude Code settings
+.claude/settings.local.json

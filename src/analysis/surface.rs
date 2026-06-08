@@ -1,0 +1,391 @@
+//! Attack-surface mapping and flag-site scanning (the non-AI core of `recon`
+//! and `analyze`).
+//!
+//! The scanner is lexical: it finds calls to dangerous/interesting functions on
+//! word boundaries, attributes each to its enclosing function, and applies a
+//! handful of reachability/pre-auth heuristics. It is intentionally heuristic —
+//! the value is fast, deterministic surfacing, not soundness.
+
+use super::cwe;
+use super::{AnalysisResult, Entry, Finding, Origin, Severity};
+use crate::config::AnalysisConfig;
+use aho_corasick::AhoCorasick;
+
+/// Tokens that indicate the code reads from the network.
+const NETWORK_TOKENS: &[&str] = &[
+    "recv", "recvfrom", "recvmsg", "accept", "accept4", "WSARecv", "SSL_read",
+];
+/// Tokens that indicate a parser/deserialization entry point.
+const PARSER_TOKENS: &[&str] = &[
+    "parse", "decode", "deserialize", "unmarshal", "scan", "tokenize", "read_",
+];
+/// Tokens that indicate an authentication/authorization gate.
+const AUTH_TOKENS: &[&str] = &[
+    "authenticate", "auth_check", "check_auth", "verify_password", "login",
+    "is_authorized", "require_auth", "check_perm",
+];
+
+fn is_ident_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// A flagged call site.
+struct FlagSite {
+    line: usize,
+    token: String,
+}
+
+/// Find whole-word occurrences of any pattern, one record per match.
+fn find_flag_sites(content: &str, patterns: &[String]) -> Vec<FlagSite> {
+    if patterns.is_empty() {
+        return Vec::new();
+    }
+    let ac = match AhoCorasick::new(patterns) {
+        Ok(ac) => ac,
+        Err(_) => return Vec::new(),
+    };
+    let mut sites = Vec::new();
+    for (idx, line) in content.lines().enumerate() {
+        // Skip obvious comment lines to cut noise.
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("//") || trimmed.starts_with('*') || trimmed.starts_with('#') {
+            continue;
+        }
+        for m in ac.find_iter(line) {
+            let (s, e) = (m.start(), m.end());
+            let bytes = line.as_bytes();
+            let before_ok = s == 0 || !is_ident_char(bytes[s - 1] as char);
+            let after_ok = e >= line.len() || !is_ident_char(bytes[e] as char);
+            // Require a following '(' (allowing whitespace) so we match calls,
+            // not incidental substrings or declarations.
+            let rest = line[e..].trim_start();
+            let looks_like_call = rest.starts_with('(');
+            if before_ok && after_ok && looks_like_call {
+                sites.push(FlagSite {
+                    line: idx + 1,
+                    token: patterns
+                        .iter()
+                        .find(|p| line[s..e].eq_ignore_ascii_case(p))
+                        .cloned()
+                        .unwrap_or_else(|| line[s..e].to_string()),
+                });
+            }
+        }
+    }
+    sites
+}
+
+/// Name of the function enclosing `line_no` (1-based), best-effort.
+fn enclosing_function(content: &str, line_no: usize) -> Option<String> {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut i = line_no.min(lines.len());
+    while i > 0 {
+        let l = lines[i - 1];
+        // A definition heuristic: contains '(' and ends with '{' (or the next
+        // non-empty line is '{'), and has an identifier just before '('.
+        if let Some(paren) = l.find('(') {
+            // The brace may sit after the ')' on the same line, possibly with a
+            // trailing comment (`) {  // ...`), or on the next line.
+            let opens_block = l[paren..].contains('{')
+                || lines
+                    .get(i)
+                    .map(|n| n.trim_start().starts_with('{'))
+                    .unwrap_or(false);
+            if opens_block {
+                let head = &l[..paren];
+                if let Some(name) = head
+                    .rsplit(|c: char| !is_ident_char(c))
+                    .find(|s| !s.is_empty())
+                {
+                    // Skip control keywords masquerading as calls.
+                    if !matches!(name, "if" | "for" | "while" | "switch" | "return") {
+                        return Some(name.to_string());
+                    }
+                }
+            }
+        }
+        i -= 1;
+    }
+    None
+}
+
+fn has_token(content: &str, tokens: &[&str]) -> bool {
+    tokens.iter().any(|t| content.contains(t))
+}
+
+fn line_has_pre_auth(content: &str, line_no: usize, markers: &[String]) -> bool {
+    // Pre-auth if a marker appears in the enclosing function name or within a
+    // small window above the site.
+    if let Some(fname) = enclosing_function(content, line_no) {
+        let f = fname.to_ascii_lowercase();
+        if markers.iter().any(|m| f.contains(&m.to_ascii_lowercase())) {
+            return true;
+        }
+    }
+    let lines: Vec<&str> = content.lines().collect();
+    let start = line_no.saturating_sub(15);
+    for l in lines.iter().take(line_no).skip(start) {
+        let low = l.to_ascii_lowercase();
+        if markers.iter().any(|m| low.contains(&m.to_ascii_lowercase())) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Run static analysis over a single file's content.
+pub fn analyze_file(
+    target: &str,
+    content: &str,
+    focus: Option<&str>,
+    line_filter: Option<(usize, usize)>,
+    want_cwe: bool,
+    want_cvss: bool,
+    cfg: &AnalysisConfig,
+) -> AnalysisResult {
+    let network = has_token(content, NETWORK_TOKENS);
+    let tainted = super::taint::tainted_variables(content);
+    let lines: Vec<&str> = content.lines().collect();
+    let sites = find_flag_sites(content, &cfg.flag_patterns);
+    let mut findings = Vec::new();
+    let mut id = 0u32;
+
+    for site in sites {
+        if let Some((lo, hi)) = line_filter {
+            if site.line < lo || site.line > hi {
+                continue;
+            }
+        }
+        let Some(class) = cwe::classify(&site.token) else {
+            continue;
+        };
+        id += 1;
+        let pre_auth = line_has_pre_auth(content, site.line, &cfg.pre_auth_markers);
+        // A sink that consumes a tainted variable is reachable, and one notch
+        // more severe than the lexical default.
+        let site_line = lines.get(site.line - 1).copied().unwrap_or("");
+        let tainted_here = super::taint::line_uses_any(site_line, &tainted);
+        let reachable = network || tainted_here;
+        let severity = if tainted_here {
+            match class.default_severity {
+                Severity::Low => Severity::Medium,
+                Severity::Medium => Severity::High,
+                Severity::High => Severity::Critical,
+                other => other,
+            }
+        } else {
+            class.default_severity
+        };
+        let fname = enclosing_function(content, site.line).unwrap_or_else(|| "?".into());
+        let summary = format!(
+            "{}() at line {} — {}",
+            site.token, site.line, class.name
+        );
+        let detail = format!(
+            "Call to {}() in {}(). Classified as {} ({}). {}{}",
+            site.token,
+            fname,
+            class.name,
+            class.id,
+            if network {
+                "Network-reachable input flows into this region. "
+            } else {
+                ""
+            },
+            if pre_auth {
+                "Reached before an authentication gate."
+            } else {
+                ""
+            }
+        );
+        // CWE is always classified; `--cwe` additionally surfaces the full name
+        // in the finding detail (handled at render time). The struct field is
+        // always populated so JSON consumers get it unconditionally.
+        let _ = want_cwe;
+        findings.push(Finding {
+            id,
+            severity,
+            cwe: Some(class.id.to_string()),
+            line: Some(site.line),
+            reachable,
+            pre_auth,
+            summary,
+            detail,
+            patch_vector: Some(class.patch_vector.to_string()),
+            origin: Origin::Static,
+        });
+    }
+
+    // Sort by severity desc, then line asc, and re-number.
+    findings.sort_by(|a, b| {
+        b.severity
+            .cmp(&a.severity)
+            .then(a.line.cmp(&b.line))
+    });
+    for (i, f) in findings.iter_mut().enumerate() {
+        f.id = (i + 1) as u32;
+    }
+
+    let cvss = if want_cvss {
+        let top = findings
+            .iter()
+            .map(|f| f.severity)
+            .max()
+            .unwrap_or(Severity::Info);
+        let pre_auth = findings.iter().any(|f| f.pre_auth);
+        Some(cwe::cvss_vector(top, pre_auth, network))
+    } else {
+        None
+    };
+
+    AnalysisResult {
+        target: target.to_string(),
+        focus: focus.map(str::to_string),
+        lines_analyzed: content.lines().count(),
+        findings,
+        ai_used: false,
+        ai_block: None,
+        cvss,
+    }
+}
+
+/// Map the attack surface of a single file into entry points.
+pub fn recon_file(file: &str, content: &str, filter: Option<&str>, cfg: &AnalysisConfig) -> Vec<Entry> {
+    let mut entries = Vec::new();
+    let network = has_token(content, NETWORK_TOKENS);
+
+    // Network / parser / auth-gate entry points, attributed by enclosing fn.
+    let mut seen = std::collections::BTreeSet::new();
+    for (idx, line) in content.lines().enumerate() {
+        let line_no = idx + 1;
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("//") || trimmed.starts_with('*') {
+            continue;
+        }
+
+        let kind = if NETWORK_TOKENS.iter().any(|t| line.contains(t)) {
+            Some("network")
+        } else if AUTH_TOKENS.iter().any(|t| line.contains(t)) {
+            Some("auth-gate")
+        } else if PARSER_TOKENS.iter().any(|t| line.contains(t)) {
+            Some("parser")
+        } else {
+            None
+        };
+
+        let Some(kind) = kind else { continue };
+        let fname = enclosing_function(content, line_no).unwrap_or_else(|| "?".into());
+        let key = (fname.clone(), kind);
+        if !seen.insert(key) {
+            continue;
+        }
+        let pre_auth = line_has_pre_auth(content, line_no, &cfg.pre_auth_markers);
+        let severity = match kind {
+            "network" if pre_auth => Severity::High,
+            "network" => Severity::Medium,
+            "parser" => Severity::Medium,
+            "auth-gate" => Severity::Info,
+            _ => Severity::Low,
+        };
+        let note = match kind {
+            "network" => "reads attacker-controlled bytes off the wire",
+            "parser" => "decodes/parses untrusted input",
+            "auth-gate" => "authentication / authorization boundary",
+            _ => "",
+        }
+        .to_string();
+        entries.push(Entry {
+            name: fname,
+            file: file.to_string(),
+            line: line_no,
+            kind: kind.to_string(),
+            pre_auth: pre_auth || (kind == "network" && network),
+            note,
+            severity,
+        });
+    }
+
+    // Flag sites become "flag-site" entries (low-signal but useful in surface).
+    for site in find_flag_sites(content, &cfg.flag_patterns) {
+        let fname = enclosing_function(content, site.line).unwrap_or_else(|| "?".into());
+        if seen.insert((format!("{fname}:{}", site.line), "flag-site")) {
+            entries.push(Entry {
+                name: format!("{fname} → {}()", site.token),
+                file: file.to_string(),
+                line: site.line,
+                kind: "flag-site".to_string(),
+                pre_auth: line_has_pre_auth(content, site.line, &cfg.pre_auth_markers),
+                note: format!("dangerous sink: {}()", site.token),
+                severity: Severity::Low,
+            });
+        }
+    }
+
+    // Apply the surface filter if one was given.
+    if let Some(filter) = filter {
+        let f = filter.to_ascii_lowercase();
+        entries.retain(|e| {
+            e.kind.contains(&f)
+                || e.note.to_ascii_lowercase().contains(&f)
+                || (f.contains("pre-auth") && e.pre_auth)
+                || (f == "network" && e.kind == "network")
+        });
+    }
+
+    entries.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.line.cmp(&b.line)));
+    entries
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AnalysisConfig;
+
+    const SRC: &str = r#"
+int parse_client_hello(int fd) {
+    char buf[64];
+    int n = recv(fd, buf, 4096, 0);
+    char dst[16];
+    memcpy(dst, buf, n);
+    return n;
+}
+"#;
+
+    #[test]
+    fn taint_promotes_memcpy_to_critical() {
+        let cfg = AnalysisConfig::default();
+        let res = analyze_file("t.c", SRC, None, None, true, false, &cfg);
+        let memcpy = res
+            .findings
+            .iter()
+            .find(|f| f.summary.contains("memcpy"))
+            .expect("memcpy finding");
+        // recv() taints `n`; memcpy(dst, buf, n) consumes it → bumped a notch.
+        assert_eq!(memcpy.severity, Severity::Critical);
+        assert!(memcpy.reachable);
+        assert_eq!(memcpy.cwe.as_deref(), Some("CWE-787"));
+    }
+
+    #[test]
+    fn enclosing_function_resolves_through_brace_comment() {
+        let src = "int foo(int x) {  // trailing comment\n  strcpy(a, b);\n}\n";
+        let cfg = AnalysisConfig::default();
+        let res = analyze_file("t.c", src, None, None, false, false, &cfg);
+        assert!(res.findings.iter().any(|f| f.detail.contains("foo()")));
+    }
+
+    #[test]
+    fn line_filter_restricts_findings() {
+        let cfg = AnalysisConfig::default();
+        let res = analyze_file("t.c", SRC, None, Some((6, 6)), false, false, &cfg);
+        assert_eq!(res.findings.len(), 1);
+        assert_eq!(res.findings[0].line, Some(6));
+    }
+
+    #[test]
+    fn recon_surfaces_network_entry() {
+        let cfg = AnalysisConfig::default();
+        let entries = recon_file("t.c", SRC, None, &cfg);
+        assert!(entries.iter().any(|e| e.kind == "network"));
+    }
+}

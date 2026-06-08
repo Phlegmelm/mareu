@@ -1,0 +1,61 @@
+/*
+ * Crash reproducer scaffold — {{class}}
+ * vuln: {{vuln}}
+ *
+ * Build:
+ *   {{#if asan}}cc -g -O0 -fsanitize=address,undefined -o repro repro.c{{else}}cc -g -O0 -o repro repro.c{{/if}}
+ * Run:
+ *   ./repro < input.bin     # or: ./repro input.bin
+ *
+ * This is a SCAFFOLD. Wire up the target call path below and feed it the input
+ * that triggers the crash. Verify the offsets and structure sizes against the
+ * actual target.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <unistd.h>
+
+/* TODO: include the target's headers and link against / inline the vulnerable
+ * function. Replace this stub with the real entry point. */
+static int target_entry(const uint8_t *data, size_t len) {
+    /* e.g. parse_packet(data, len);  return 0; */
+    (void)data; (void)len;
+    return 0;
+}
+
+static uint8_t *read_all(FILE *f, size_t *out_len) {
+    size_t cap = 4096, len = 0;
+    uint8_t *buf = malloc(cap);
+    if (!buf) return NULL;
+    for (;;) {
+        if (len == cap) { cap *= 2; buf = realloc(buf, cap); if (!buf) return NULL; }
+        size_t n = fread(buf + len, 1, cap - len, f);
+        len += n;
+        if (n == 0) break;
+    }
+    *out_len = len;
+    return buf;
+}
+
+int main(int argc, char **argv) {
+    size_t len = 0;
+    uint8_t *data = NULL;
+    if (argc > 1) {
+        FILE *f = fopen(argv[1], "rb");
+        if (!f) { perror("fopen"); return 1; }
+        data = read_all(f, &len);
+        fclose(f);
+    } else {
+        data = read_all(stdin, &len);
+    }
+    if (!data) { fprintf(stderr, "read failed\n"); return 1; }
+
+    fprintf(stderr, "[repro] feeding %zu bytes to target_entry\n", len);
+    int rc = target_entry(data, len);
+    fprintf(stderr, "[repro] target returned %d (no crash this run)\n", rc);
+
+    free(data);
+    return 0;
+}

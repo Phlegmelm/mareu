@@ -1,0 +1,6 @@
+# Normalize line endings to LF across all platforms.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.o binary
+*.exe binary
