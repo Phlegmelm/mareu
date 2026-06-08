@@ -40,7 +40,9 @@ impl FromStr for OutputFormat {
             "text" | "txt" => Ok(OutputFormat::Text),
             "json" => Ok(OutputFormat::Json),
             "markdown" | "md" => Ok(OutputFormat::Markdown),
-            other => Err(format!("unknown output format: {other} (text|json|markdown)")),
+            other => Err(format!(
+                "unknown output format: {other} (text|json|markdown)"
+            )),
         }
     }
 }

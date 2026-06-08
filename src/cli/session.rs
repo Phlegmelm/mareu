@@ -58,7 +58,11 @@ pub async fn exec(ctx: &Ctx, args: &SessionArgs) -> Result<i32> {
         SessionCmd::New { name, target } => {
             store.create(name, target.clone())?;
             store.attach(name)?;
-            println!("{} created and attached session '{}'", p.paint(SUCCESS, "✓"), name);
+            println!(
+                "{} created and attached session '{}'",
+                p.paint(SUCCESS, "✓"),
+                name
+            );
         }
         SessionCmd::List => {
             let sessions = store.list()?;
@@ -150,7 +154,10 @@ fn confirm(prompt: &str) -> Result<bool> {
     std::io::stdout().flush()?;
     let mut line = String::new();
     std::io::stdin().read_line(&mut line)?;
-    Ok(matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes"))
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 fn human_size(bytes: u64) -> String {

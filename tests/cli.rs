@@ -14,8 +14,7 @@ fn analyze_json_reports_findings() {
         .output()
         .expect("run mareu");
     assert!(out.status.success());
-    let v: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("valid json on stdout");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("valid json on stdout");
     assert_eq!(v["command"], "analyze");
     assert_eq!(v["ai_used"], false);
     let findings = v["findings"].as_array().unwrap();
@@ -51,7 +50,13 @@ fn analyze_reads_stdin() {
 #[test]
 fn scaffold_intent_check_refuses_named_target() {
     let out = mareu()
-        .args(["scaffold", "--type", "poc", "--vuln", "pwn target.victim.com"])
+        .args([
+            "scaffold",
+            "--type",
+            "poc",
+            "--vuln",
+            "pwn target.victim.com",
+        ])
         .output()
         .unwrap();
     // Exit code 2 = intent refusal (RFC §4.2).
@@ -61,7 +66,9 @@ fn scaffold_intent_check_refuses_named_target() {
 #[test]
 fn scaffold_exploit_requires_unsafe() {
     let out = mareu()
-        .args(["scaffold", "--type", "exploit", "--class", "bof", "--vuln", "x"])
+        .args([
+            "scaffold", "--type", "exploit", "--class", "bof", "--vuln", "x",
+        ])
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(1));
@@ -72,7 +79,16 @@ fn scaffold_exploit_requires_unsafe() {
 #[test]
 fn scaffold_template_is_deterministic_and_runnable_shape() {
     let out = mareu()
-        .args(["scaffold", "--type", "poc", "--class", "bof", "--vuln", "x", "--no-color"])
+        .args([
+            "scaffold",
+            "--type",
+            "poc",
+            "--class",
+            "bof",
+            "--vuln",
+            "x",
+            "--no-color",
+        ])
         .output()
         .unwrap();
     assert!(out.status.success());

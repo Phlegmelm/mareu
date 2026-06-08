@@ -1,5 +1,8 @@
 # Mareu
 
+[![CI](https://github.com/Phlegmelm/mareu/actions/workflows/ci.yml/badge.svg)](https://github.com/Phlegmelm/mareu/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
+
 **a lil terminal gremlin for finding bugs in other people's code (with permission, obviously).**
 
 ```
@@ -23,6 +26,10 @@ it is **not** a scanner. it does not run nmap. it does not have a dashboard. if 
 - **treats you like an adult.** no "are you sure?", no "please consult a professional." you ARE the professional. go forth.
 
 ## just gimme the thing
+
+**no rust? grab a prebuilt binary** from [Releases](https://github.com/Phlegmelm/mareu/releases) (linux/mac x86_64+arm64, windows x86_64), unzip, put it on your PATH, done.
+
+**got rust + the source?** run the installer:
 
 ```bash
 # linux / mac (symlinks it onto your PATH, sets up completions, the works)

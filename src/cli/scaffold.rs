@@ -87,7 +87,11 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
     }
 
     let unsafe_mode = args.r#unsafe || ctx.cfg().scaffold.unsafe_default;
-    let date = ctx.timestamp.get(..10).unwrap_or(&ctx.timestamp).to_string();
+    let date = ctx
+        .timestamp
+        .get(..10)
+        .unwrap_or(&ctx.timestamp)
+        .to_string();
 
     // Validate/clean the egg tag (hex, optional 0x), if given.
     let egg = match &args.egg {
@@ -132,31 +136,44 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
             Ok(text) => {
                 let code = extract_code(&text);
                 // Re-attach the header (which already records ai=true).
-                let header_end = scaffold
-                    .body
-                    .find("\n\n")
-                    .map(|i| i + 2)
-                    .unwrap_or(0);
+                let header_end = scaffold.body.find("\n\n").map(|i| i + 2).unwrap_or(0);
                 let header = &scaffold.body[..header_end];
                 scaffold.body = format!("{header}{code}");
             }
-            Err(e) => ctx.ui.status(&format!("  ai error: {e}; emitting template scaffold")),
+            Err(e) => ctx
+                .ui
+                .status(&format!("  ai error: {e}; emitting template scaffold")),
         }
     } else if ctx.dry_run {
         // Dry-run without AI: show the template that *would* be sent.
-        println!("===== SCAFFOLD TEMPLATE (no --ai) =====\n{}", scaffold.template_only);
+        println!(
+            "===== SCAFFOLD TEMPLATE (no --ai) =====\n{}",
+            scaffold.template_only
+        );
         return Ok(0);
     }
 
     // Save to disk / session if requested.
     let mut saved_paths = Vec::new();
     // All artifacts (primary + any extra syntaxes) as (filename, body) pairs.
-    let artifacts: Vec<(&str, &str)> = std::iter::once((scaffold.filename.as_str(), scaffold.body.as_str()))
-        .chain(scaffold.extra.iter().map(|e| (e.filename.as_str(), e.body.as_str())))
-        .collect();
+    let artifacts: Vec<(&str, &str)> =
+        std::iter::once((scaffold.filename.as_str(), scaffold.body.as_str()))
+            .chain(
+                scaffold
+                    .extra
+                    .iter()
+                    .map(|e| (e.filename.as_str(), e.body.as_str())),
+            )
+            .collect();
 
     if args.save {
-        let dir = format!("mareu_scaffold_{}", ctx.timestamp.replace([':', '-'], "").get(..15).unwrap_or("ts"));
+        let dir = format!(
+            "mareu_scaffold_{}",
+            ctx.timestamp
+                .replace([':', '-'], "")
+                .get(..15)
+                .unwrap_or("ts")
+        );
         std::fs::create_dir_all(&dir)?;
         for (fname, body) in &artifacts {
             let path = std::path::Path::new(&dir).join(fname);
@@ -171,7 +188,10 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
                     let p = store.write_artifact(name, fname, body)?;
                     saved_paths.push(p.to_string_lossy().to_string());
                 }
-                let _ = store.append_note(name, &format!("scaffold {} → {}", req.kind, scaffold.filename));
+                let _ = store.append_note(
+                    name,
+                    &format!("scaffold {} → {}", req.kind, scaffold.filename),
+                );
             }
         }
     }
@@ -248,9 +268,20 @@ fn resolve_lang(args: &ScaffoldArgs) -> String {
         .map(|c| {
             matches!(
                 c.to_ascii_lowercase().as_str(),
-                "shellcode" | "execve" | "sh" | "shell" | "egghunter" | "egg"
-                    | "loader" | "stager" | "stage" | "ret2" | "rop" | "win"
-                    | "proof" | "syscall"
+                "shellcode"
+                    | "execve"
+                    | "sh"
+                    | "shell"
+                    | "egghunter"
+                    | "egg"
+                    | "loader"
+                    | "stager"
+                    | "stage"
+                    | "ret2"
+                    | "rop"
+                    | "win"
+                    | "proof"
+                    | "syscall"
             )
         })
         .unwrap_or(false);
@@ -261,7 +292,12 @@ fn resolve_lang(args: &ScaffoldArgs) -> String {
     }
 }
 
-fn build_prompt(ctx: &Ctx, req: &ScaffoldRequest, template: &str, attach: &[String]) -> Result<String> {
+fn build_prompt(
+    ctx: &Ctx,
+    req: &ScaffoldRequest,
+    template: &str,
+    attach: &[String],
+) -> Result<String> {
     let files = context::load_files(attach);
     let (ctx_block, _) = context::format_files(&files, ctx.cfg().context.max_tokens as usize);
     let vars = context::vars(

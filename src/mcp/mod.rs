@@ -219,10 +219,15 @@ async fn call_tool(ctx: &Ctx, name: &str, args: &Value) -> Result<Value> {
     let cfg = ctx.cfg();
     match name {
         "mareu_recon" => {
-            let target = args.get("target").and_then(|v| v.as_str())
+            let target = args
+                .get("target")
+                .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow!("'target' is required"))?;
             let filter = args.get("filter").and_then(|v| v.as_str());
-            let depth = args.get("depth").and_then(|v| v.as_u64()).map(|d| d as usize);
+            let depth = args
+                .get("depth")
+                .and_then(|v| v.as_u64())
+                .map(|d| d as usize);
             let (entries, scanned) =
                 surface::recon_tree(Path::new(target), filter, depth, &cfg.analysis);
             let res = ReconResult {
@@ -240,8 +245,10 @@ async fn call_tool(ctx: &Ctx, name: &str, args: &Value) -> Result<Value> {
                 args.get("file").and_then(|v| v.as_str()),
                 args.get("content").and_then(|v| v.as_str()),
             ) {
-                (Some(f), _) => (f.to_string(), std::fs::read_to_string(f)
-                    .map_err(|e| anyhow!("reading {f}: {e}"))?),
+                (Some(f), _) => (
+                    f.to_string(),
+                    std::fs::read_to_string(f).map_err(|e| anyhow!("reading {f}: {e}"))?,
+                ),
                 (None, Some(c)) => ("<inline>".to_string(), c.to_string()),
                 (None, None) => return Err(anyhow!("provide 'file' or 'content'")),
             };
@@ -253,18 +260,48 @@ async fn call_tool(ctx: &Ctx, name: &str, args: &Value) -> Result<Value> {
             let cwe = args.get("cwe").and_then(|v| v.as_bool()).unwrap_or(true);
             let cvss = args.get("cvss").and_then(|v| v.as_bool()).unwrap_or(false);
             let res = surface::analyze_file(
-                &target, &content, finding, line_filter, cwe, cvss, &cfg.analysis,
+                &target,
+                &content,
+                finding,
+                line_filter,
+                cwe,
+                cvss,
+                &cfg.analysis,
             );
             Ok(jsonenv::analysis(&res, &ctx.timestamp, 0))
         }
         "mareu_scaffold" => {
-            let kind = args.get("type").and_then(|v| v.as_str()).unwrap_or("poc").to_string();
-            let class = args.get("class").and_then(|v| v.as_str()).map(str::to_string);
-            let arch = args.get("arch").and_then(|v| v.as_str()).unwrap_or("x86_64").to_string();
-            let vuln = args.get("vuln").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let unsafe_mode = args.get("unsafe").and_then(|v| v.as_bool()).unwrap_or(false);
-            let syntax = args.get("syntax").and_then(|v| v.as_str()).unwrap_or("both").to_string();
-            let egg = args.get("egg").and_then(|v| v.as_str())
+            let kind = args
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("poc")
+                .to_string();
+            let class = args
+                .get("class")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            let arch = args
+                .get("arch")
+                .and_then(|v| v.as_str())
+                .unwrap_or("x86_64")
+                .to_string();
+            let vuln = args
+                .get("vuln")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let unsafe_mode = args
+                .get("unsafe")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let syntax = args
+                .get("syntax")
+                .and_then(|v| v.as_str())
+                .unwrap_or("both")
+                .to_string();
+            let egg = args
+                .get("egg")
+                .and_then(|v| v.as_str())
                 .map(|s| s.trim_start_matches("0x").to_ascii_lowercase());
             let lang = match args.get("lang").and_then(|v| v.as_str()) {
                 Some(l) => l.to_string(),
@@ -285,14 +322,23 @@ async fn call_tool(ctx: &Ctx, name: &str, args: &Value) -> Result<Value> {
                 model: None,
                 custom_template: None,
                 header_comment: true,
-                timestamp: ctx.timestamp.get(..10).unwrap_or(&ctx.timestamp).to_string(),
+                timestamp: ctx
+                    .timestamp
+                    .get(..10)
+                    .unwrap_or(&ctx.timestamp)
+                    .to_string(),
                 asm_syntax: syntax,
                 egg,
             };
             let s = scaffold::generate(&req)?;
-            let files: Vec<Value> = std::iter::once(json!({ "filename": s.filename, "body": s.body }))
-                .chain(s.extra.iter().map(|e| json!({ "filename": e.filename, "body": e.body })))
-                .collect();
+            let files: Vec<Value> =
+                std::iter::once(json!({ "filename": s.filename, "body": s.body }))
+                    .chain(
+                        s.extra
+                            .iter()
+                            .map(|e| json!({ "filename": e.filename, "body": e.body })),
+                    )
+                    .collect();
             Ok(json!({
                 "filename": s.filename,
                 "lang": s.lang,
@@ -304,7 +350,9 @@ async fn call_tool(ctx: &Ctx, name: &str, args: &Value) -> Result<Value> {
             let store = Store::open(cfg)?;
             let name = match args.get("name").and_then(|v| v.as_str()) {
                 Some(n) => n.to_string(),
-                None => store.active()?.ok_or_else(|| anyhow!("no active session; pass 'name'"))?,
+                None => store
+                    .active()?
+                    .ok_or_else(|| anyhow!("no active session; pass 'name'"))?,
             };
             let meta = store.load_meta(&name)?;
             let notes = store.read_notes(&name)?;
@@ -336,8 +384,16 @@ fn infer_lang(class: Option<&str>, syntax_given: bool) -> String {
         .map(|c| {
             matches!(
                 c.to_ascii_lowercase().as_str(),
-                "shellcode" | "egghunter" | "egg" | "loader" | "stager" | "ret2" | "rop"
-                    | "win" | "proof" | "syscall"
+                "shellcode"
+                    | "egghunter"
+                    | "egg"
+                    | "loader"
+                    | "stager"
+                    | "ret2"
+                    | "rop"
+                    | "win"
+                    | "proof"
+                    | "syscall"
             )
         })
         .unwrap_or(false);

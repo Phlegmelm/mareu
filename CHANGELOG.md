@@ -46,6 +46,9 @@ AI layer, sessions, REPL) — **cross-platform on Linux, macOS, and Windows**
 - **Output** — colored box-drawing text, markdown, and a stable JSON schema
   (see `docs/json-schema.md`); honors `--no-color`/`NO_COLOR`/tty; streaming.
 - **Config** — 5-layer precedence, `${ENV}` interpolation, secret masking.
+- **CI/CD** — GitHub Actions: `ci.yml` builds + tests on Linux/macOS/Windows
+  with `fmt`/`clippy -D warnings` gates; `release.yml` attaches prebuilt
+  binaries (5 targets, with checksums) to a GitHub Release on version-tag push.
 - **Installers** (`setup/`) — idempotent `install.sh`/`uninstall.sh`
   (Linux/macOS: symlink-or-copy onto PATH, bash/zsh/fish completions, man page)
   and `install.ps1`/`uninstall.ps1` (+ `install.cmd`; Windows: user-PATH, no

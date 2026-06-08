@@ -76,7 +76,10 @@ pub fn format_files(files: &[ContextFile], budget: usize) -> (String, usize) {
             break;
         }
         let lang = lang_hint(&f.path);
-        out.push_str(&format!("\n## {}\n\n```{lang}\n{}\n```\n", f.path, f.content));
+        out.push_str(&format!(
+            "\n## {}\n\n```{lang}\n{}\n```\n",
+            f.path, f.content
+        ));
         used += f.tokens;
         included += 1;
     }

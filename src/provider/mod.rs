@@ -75,7 +75,11 @@ pub struct ProviderStatus {
 pub trait Provider: Send + Sync {
     async fn complete(&self, req: CompletionRequest) -> Result<CompletionResponse>;
     /// Stream the response, pushing text deltas to `tx`; returns the full text.
-    async fn stream(&self, req: CompletionRequest, tx: Sender<String>) -> Result<CompletionResponse>;
+    async fn stream(
+        &self,
+        req: CompletionRequest,
+        tx: Sender<String>,
+    ) -> Result<CompletionResponse>;
     async fn health(&self) -> Result<ProviderStatus>;
     fn name(&self) -> &str;
     fn model(&self) -> &str;
@@ -86,17 +90,16 @@ pub const BUILTINS: &[&str] = &["openrouter", "anthropic", "openai", "ollama"];
 
 /// Build the named provider from resolved config.
 pub fn build(cfg: &Config, name: &str) -> Result<Box<dyn Provider>> {
-    let entry = match name {
-        "openrouter" => &cfg.provider.openrouter,
-        "anthropic" => &cfg.provider.anthropic,
-        "openai" => &cfg.provider.openai,
-        "ollama" => &cfg.provider.ollama,
-        other => cfg
-            .provider
-            .extra
-            .get(other)
-            .ok_or_else(|| anyhow!("unknown provider '{other}'; see `mareu config providers`"))?,
-    };
+    let entry =
+        match name {
+            "openrouter" => &cfg.provider.openrouter,
+            "anthropic" => &cfg.provider.anthropic,
+            "openai" => &cfg.provider.openai,
+            "ollama" => &cfg.provider.ollama,
+            other => cfg.provider.extra.get(other).ok_or_else(|| {
+                anyhow!("unknown provider '{other}'; see `mareu config providers`")
+            })?,
+        };
 
     let model = entry.model.clone().unwrap_or_default();
     let base_url = entry.base_url.clone().unwrap_or_default();

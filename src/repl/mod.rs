@@ -31,7 +31,10 @@ pub async fn run(ctx: &Ctx, args: &ShellArgs) -> Result<i32> {
     let store = Store::open(ctx.cfg()).ok();
 
     let mut state = State {
-        session: args.session.clone().or_else(|| store.as_ref().and_then(|s| s.active().ok().flatten())),
+        session: args
+            .session
+            .clone()
+            .or_else(|| store.as_ref().and_then(|s| s.active().ok().flatten())),
         target: args.target.clone(),
         ai: ctx.ai,
         provider_override: None,
@@ -58,9 +61,15 @@ pub async fn run(ctx: &Ctx, args: &ShellArgs) -> Result<i32> {
     }
 
     if ctx.cfg().banner.style != "none" && ctx.ui.verbosity >= 1 {
-        println!("{}", crate::banner::full(&ctx.ui, &status_line(ctx, &state)));
+        println!(
+            "{}",
+            crate::banner::full(&ctx.ui, &status_line(ctx, &state))
+        );
     }
-    println!("  {}", p.paint(DIM, "type /help for commands, /exit to quit"));
+    println!(
+        "  {}",
+        p.paint(DIM, "type /help for commands, /exit to quit")
+    );
 
     let mut rl = complete::editor()?;
 
@@ -130,7 +139,14 @@ async fn handle_slash(
         "/help" | "/?" => println!("{}", commands::HELP),
         "/ai" => {
             state.ai = !state.ai;
-            println!("  ai {}", if state.ai { p.paint(SUCCESS, "on") } else { p.paint(DIM, "off") });
+            println!(
+                "  ai {}",
+                if state.ai {
+                    p.paint(SUCCESS, "on")
+                } else {
+                    p.paint(DIM, "off")
+                }
+            );
         }
         "/clear" => {
             state.history.clear();
@@ -149,7 +165,10 @@ async fn handle_slash(
                         if let (Some(store), Some(name)) = (store, &state.session) {
                             let _ = store.add_context_file(name, rest, tokens);
                         }
-                        println!("  {} loaded {rest} (~{tokens} tokens)", p.paint(SUCCESS, "✓"));
+                        println!(
+                            "  {} loaded {rest} (~{tokens} tokens)",
+                            p.paint(SUCCESS, "✓")
+                        );
                     }
                     Err(e) => println!("  {} {rest}: {e}", p.paint(DIM, "error")),
                 }
@@ -197,7 +216,10 @@ async fn handle_slash(
         }
         "/model" => {
             if rest.is_empty() {
-                println!("  current model override: {}", state.model_override.as_deref().unwrap_or("(default)"));
+                println!(
+                    "  current model override: {}",
+                    state.model_override.as_deref().unwrap_or("(default)")
+                );
             } else {
                 state.model_override = Some(rest.to_string());
                 println!("  {} model → {rest}", p.paint(SUCCESS, "✓"));
@@ -205,7 +227,10 @@ async fn handle_slash(
         }
         "/provider" => {
             if rest.is_empty() {
-                println!("  current provider override: {}", state.provider_override.as_deref().unwrap_or("(default)"));
+                println!(
+                    "  current provider override: {}",
+                    state.provider_override.as_deref().unwrap_or("(default)")
+                );
             } else {
                 state.provider_override = Some(rest.to_string());
                 println!("  {} provider → {rest}", p.paint(SUCCESS, "✓"));
@@ -229,7 +254,11 @@ fn print_context(ctx: &Ctx, state: &State) {
     for (path, content) in &state.context_files {
         let t = context::estimate_tokens(content);
         total += t;
-        println!("  {} {:<40} ~{t} tokens", p.paint(ACCENT, "▸"), p.paint(PRIMARY, path));
+        println!(
+            "  {} {:<40} ~{t} tokens",
+            p.paint(ACCENT, "▸"),
+            p.paint(PRIMARY, path)
+        );
     }
     println!("  {}", p.paint(DIM, &format!("total ~{total} tokens")));
 }
@@ -372,7 +401,10 @@ fn build_shell_system(state: &State) -> String {
 async fn chat(ctx: &Ctx, state: &mut State, store: Option<&Store>, line: &str) {
     let p = ctx.ui.painter();
     if !state.ai {
-        println!("  {}", p.paint(DIM, "ai is off — toggle with /ai, or use a slash-command"));
+        println!(
+            "  {}",
+            p.paint(DIM, "ai is off — toggle with /ai, or use a slash-command")
+        );
         return;
     }
     let system = build_shell_system(state);

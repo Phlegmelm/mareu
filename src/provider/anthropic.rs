@@ -1,6 +1,9 @@
 //! Anthropic Messages API provider (direct).
 
-use super::{client, pump, Chunk, CompletionRequest, CompletionResponse, Provider, ProviderStatus, TokenUsage};
+use super::{
+    client, pump, Chunk, CompletionRequest, CompletionResponse, Provider, ProviderStatus,
+    TokenUsage,
+};
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -77,7 +80,10 @@ impl Anthropic {
 impl Provider for Anthropic {
     async fn complete(&self, req: CompletionRequest) -> Result<CompletionResponse> {
         let start = Instant::now();
-        let rb = self.http.post(self.endpoint()).json(&self.body(&req, false));
+        let rb = self
+            .http
+            .post(self.endpoint())
+            .json(&self.body(&req, false));
         let resp = self.auth(rb)?.send().await?;
         let status = resp.status();
         let v: serde_json::Value = resp.json().await?;
@@ -105,7 +111,11 @@ impl Provider for Anthropic {
         })
     }
 
-    async fn stream(&self, req: CompletionRequest, tx: Sender<String>) -> Result<CompletionResponse> {
+    async fn stream(
+        &self,
+        req: CompletionRequest,
+        tx: Sender<String>,
+    ) -> Result<CompletionResponse> {
         let start = Instant::now();
         let rb = self.http.post(self.endpoint()).json(&self.body(&req, true));
         let resp = self.auth(rb)?.send().await?;

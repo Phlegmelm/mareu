@@ -10,8 +10,18 @@ use std::collections::BTreeSet;
 
 /// Functions whose return value (or out-parameter) is attacker-influenced.
 const SOURCE_FNS: &[&str] = &[
-    "recv", "recvfrom", "read", "fread", "fgets", "getenv", "scanf", "sscanf",
-    "getline", "json_loads", "atoi", "strtol",
+    "recv",
+    "recvfrom",
+    "read",
+    "fread",
+    "fgets",
+    "getenv",
+    "scanf",
+    "sscanf",
+    "getline",
+    "json_loads",
+    "atoi",
+    "strtol",
 ];
 
 fn is_ident_char(c: char) -> bool {
@@ -58,10 +68,7 @@ pub fn tainted_variables(content: &str) -> BTreeSet<String> {
                 let args = &line[open + 1..open + close];
                 for arg in args.split(',').skip(1) {
                     let a = arg.trim().trim_start_matches('&').trim();
-                    let ident: String = a
-                        .chars()
-                        .take_while(|&c| is_ident_char(c))
-                        .collect();
+                    let ident: String = a.chars().take_while(|&c| is_ident_char(c)).collect();
                     if ident.len() > 1 {
                         tainted.insert(ident);
                     }

@@ -90,11 +90,7 @@ async fn run() -> anyhow::Result<i32> {
 
     let color = resolve_color(g, &loaded.config, stdout_tty, format);
 
-    let verbosity = if g.quiet {
-        0
-    } else {
-        (1 + g.verbose).min(4)
-    };
+    let verbosity = if g.quiet { 0 } else { (1 + g.verbose).min(4) };
 
     let ai = if g.no_ai {
         false
@@ -141,7 +137,10 @@ async fn run() -> anyhow::Result<i32> {
             // Compact banner to stderr for non-shell subcommands.
             if !banner::suppressed(g.quiet, stdin_piped)
                 && style == "full"
-                && !matches!(cli.command, Some(Commands::Shell(_)) | Some(Commands::Mcp(_)))
+                && !matches!(
+                    cli.command,
+                    Some(Commands::Shell(_)) | Some(Commands::Mcp(_))
+                )
             {
                 eprintln!("{}", banner::compact(&ctx.ui));
             }
@@ -180,7 +179,10 @@ async fn run() -> anyhow::Result<i32> {
 }
 
 fn resolve_format(g: &cli::GlobalArgs, cfg: &config::Config) -> anyhow::Result<OutputFormat> {
-    let raw = g.output.clone().unwrap_or_else(|| cfg.output.format.clone());
+    let raw = g
+        .output
+        .clone()
+        .unwrap_or_else(|| cfg.output.format.clone());
     raw.parse::<OutputFormat>().map_err(|e| anyhow::anyhow!(e))
 }
 

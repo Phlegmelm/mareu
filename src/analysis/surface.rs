@@ -23,12 +23,24 @@ const NETWORK_TOKENS: &[&str] = &[
 ];
 /// Tokens that indicate a parser/deserialization entry point.
 const PARSER_TOKENS: &[&str] = &[
-    "parse", "decode", "deserialize", "unmarshal", "scan", "tokenize", "read_",
+    "parse",
+    "decode",
+    "deserialize",
+    "unmarshal",
+    "scan",
+    "tokenize",
+    "read_",
 ];
 /// Tokens that indicate an authentication/authorization gate.
 const AUTH_TOKENS: &[&str] = &[
-    "authenticate", "auth_check", "check_auth", "verify_password", "login",
-    "is_authorized", "require_auth", "check_perm",
+    "authenticate",
+    "auth_check",
+    "check_auth",
+    "verify_password",
+    "login",
+    "is_authorized",
+    "require_auth",
+    "check_perm",
 ];
 
 fn is_ident_char(c: char) -> bool {
@@ -132,7 +144,10 @@ fn line_has_pre_auth(content: &str, line_no: usize, markers: &[String]) -> bool 
     let start = line_no.saturating_sub(15);
     for l in lines.iter().take(line_no).skip(start) {
         let low = l.to_ascii_lowercase();
-        if markers.iter().any(|m| low.contains(&m.to_ascii_lowercase())) {
+        if markers
+            .iter()
+            .any(|m| low.contains(&m.to_ascii_lowercase()))
+        {
             return true;
         }
     }
@@ -183,10 +198,7 @@ pub fn analyze_file(
             class.default_severity
         };
         let fname = enclosing_function(content, site.line).unwrap_or_else(|| "?".into());
-        let summary = format!(
-            "{}() at line {} — {}",
-            site.token, site.line, class.name
-        );
+        let summary = format!("{}() at line {} — {}", site.token, site.line, class.name);
         let detail = format!(
             "Call to {}() in {}(). Classified as {} ({}). {}{}",
             site.token,
@@ -223,11 +235,7 @@ pub fn analyze_file(
     }
 
     // Sort by severity desc, then line asc, and re-number.
-    findings.sort_by(|a, b| {
-        b.severity
-            .cmp(&a.severity)
-            .then(a.line.cmp(&b.line))
-    });
+    findings.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.line.cmp(&b.line)));
     for (i, f) in findings.iter_mut().enumerate() {
         f.id = (i + 1) as u32;
     }
@@ -256,7 +264,12 @@ pub fn analyze_file(
 }
 
 /// Map the attack surface of a single file into entry points.
-pub fn recon_file(file: &str, content: &str, filter: Option<&str>, cfg: &AnalysisConfig) -> Vec<Entry> {
+pub fn recon_file(
+    file: &str,
+    content: &str,
+    filter: Option<&str>,
+    cfg: &AnalysisConfig,
+) -> Vec<Entry> {
     let mut entries = Vec::new();
     let network = has_token(content, NETWORK_TOKENS);
 
@@ -346,8 +359,14 @@ fn filter_entries(entries: &mut Vec<Entry>, filter: Option<&str>) {
 }
 
 /// Classify a called symbol (from disassembly) into a surface category.
-fn classify_symbol(sym: &str, _cfg: &AnalysisConfig) -> Option<(&'static str, Severity, &'static str)> {
-    if NETWORK_TOKENS.iter().any(|t| sym.contains(&t.to_ascii_lowercase())) {
+fn classify_symbol(
+    sym: &str,
+    _cfg: &AnalysisConfig,
+) -> Option<(&'static str, Severity, &'static str)> {
+    if NETWORK_TOKENS
+        .iter()
+        .any(|t| sym.contains(&t.to_ascii_lowercase()))
+    {
         return Some(("network", Severity::High, "reads network input"));
     }
     if AUTH_TOKENS.iter().any(|t| sym.contains(t)) {
@@ -399,14 +418,19 @@ pub fn recon_disasm(
         }
         // Extract the symbol inside <...>.
         let Some(lt) = instr.rfind('<') else { continue };
-        let Some(gt_rel) = instr[lt..].find('>') else { continue };
+        let Some(gt_rel) = instr[lt..].find('>') else {
+            continue;
+        };
         let raw_sym = &instr[lt + 1..lt + gt_rel];
         let had_plt = raw_sym.contains("@plt");
         if mnem == "jmp" && !had_plt {
             continue; // local jumps are control flow, not calls of interest
         }
         // Clean: drop @plt/@got suffix and +0x.. offset.
-        let sym: String = raw_sym.chars().take_while(|&c| c != '@' && c != '+').collect();
+        let sym: String = raw_sym
+            .chars()
+            .take_while(|&c| c != '@' && c != '+')
+            .collect();
         let sym_l = sym.to_ascii_lowercase();
         if sym_l.is_empty() {
             continue;
@@ -417,10 +441,11 @@ pub fn recon_disasm(
         if !seen.insert((current_fn.clone(), sym_l.clone())) {
             continue;
         }
-        let pre_auth = cfg
-            .pre_auth_markers
-            .iter()
-            .any(|m| current_fn.to_ascii_lowercase().contains(&m.to_ascii_lowercase()));
+        let pre_auth = cfg.pre_auth_markers.iter().any(|m| {
+            current_fn
+                .to_ascii_lowercase()
+                .contains(&m.to_ascii_lowercase())
+        });
         entries.push(Entry {
             name: format!("{current_fn} → {sym}()"),
             file: file.to_string(),
@@ -439,7 +464,11 @@ pub fn recon_disasm(
 
 /// Run recon over an explicit list of files. Returns (sorted entries, files
 /// actually read).
-pub fn recon_files(files: &[PathBuf], filter: Option<&str>, cfg: &AnalysisConfig) -> (Vec<Entry>, usize) {
+pub fn recon_files(
+    files: &[PathBuf],
+    filter: Option<&str>,
+    cfg: &AnalysisConfig,
+) -> (Vec<Entry>, usize) {
     let mut entries = Vec::new();
     let mut scanned = 0usize;
     for f in files {
@@ -577,9 +606,9 @@ int parse_client_hello(int fd) {
 ";
         let cfg = AnalysisConfig::default();
         let entries = recon_disasm("bin", dump, &cfg, None);
-        assert!(entries
-            .iter()
-            .any(|e| e.kind == "network" && e.name.contains("parse_packet") && e.name.contains("recv")));
+        assert!(entries.iter().any(|e| e.kind == "network"
+            && e.name.contains("parse_packet")
+            && e.name.contains("recv")));
         assert!(entries.iter().any(|e| e.name.contains("memcpy")));
         assert!(entries
             .iter()

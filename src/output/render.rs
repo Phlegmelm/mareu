@@ -2,8 +2,8 @@
 //! color-aligned text output described in RFC §5.2.
 
 use super::{
-    boxed, indent, wrap, Cell, Painter, Rgb, Ui, ACCENT, BORDER, DIM, HIGHLIGHT, INFO, PRIMARY,
-    SUCCESS, BOX_WIDTH,
+    boxed, indent, wrap, Cell, Painter, Rgb, Ui, ACCENT, BORDER, BOX_WIDTH, DIM, HIGHLIGHT, INFO,
+    PRIMARY, SUCCESS,
 };
 use crate::analysis::{cwe, AnalysisResult, Entry, ReconResult, Severity};
 
@@ -95,15 +95,11 @@ fn ai_box(p: &Painter, model: Option<&str>, text: &str) -> String {
         rows.push(c);
         rows.push(Cell::new());
     }
-    rows.extend(
-        wrap(text, BOX_WIDTH)
-            .into_iter()
-            .map(|l| {
-                let mut c = Cell::new();
-                c.paint(p, INFO, &l);
-                c
-            }),
-    );
+    rows.extend(wrap(text, BOX_WIDTH).into_iter().map(|l| {
+        let mut c = Cell::new();
+        c.paint(p, INFO, &l);
+        c
+    }));
     boxed(p, "[AI] EXTENDED ANALYSIS", &rows, INFO)
 }
 
@@ -149,7 +145,11 @@ pub fn analysis(
     }
 
     if let Some(v) = &res.cvss {
-        out.push_str(&format!("  {} {}\n", p.paint(DIM, "cvss     "), p.paint(HIGHLIGHT, v)));
+        out.push_str(&format!(
+            "  {} {}\n",
+            p.paint(DIM, "cvss     "),
+            p.paint(HIGHLIGHT, v)
+        ));
     }
 
     if ui.verbosity >= 1 {
@@ -187,9 +187,9 @@ pub fn recon(ui: &Ui, res: &ReconResult, provider: Option<&str>, duration_ms: u1
             out.push_str(&format!("  {} {}\n", p.paint(DIM, "filter   "), f));
         }
         out.push_str(&format!(
-            "  {} {}\n",
+            "  {} {} file(s)\n",
             p.paint(DIM, "scanned  "),
-            format!("{} file(s)", res.files_scanned)
+            res.files_scanned
         ));
         let prov = provider.unwrap_or("— (static only)");
         out.push_str(&format!("  {} {}\n", p.paint(DIM, "provider "), prov));
@@ -323,4 +323,3 @@ pub fn recon_md(res: &ReconResult) -> String {
     }
     s
 }
-

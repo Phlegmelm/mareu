@@ -33,7 +33,10 @@ pub fn stdout_tty() -> bool {
 /// raw bytes suppressed.
 pub fn disassemble(path: &str) -> Result<String> {
     let candidates = [
-        ("objdump", vec!["-d", "-M", "intel", "--no-show-raw-insn", path]),
+        (
+            "objdump",
+            vec!["-d", "-M", "intel", "--no-show-raw-insn", path],
+        ),
         ("llvm-objdump", vec!["-d", "--x86-asm-syntax=intel", path]),
         ("gobjdump", vec!["-d", "-M", "intel", path]),
     ];

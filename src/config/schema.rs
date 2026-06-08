@@ -206,9 +206,8 @@ impl Default for AnalysisConfig {
     fn default() -> Self {
         Self {
             flag_patterns: [
-                "memcpy", "strcpy", "strcat", "sprintf", "gets", "recv", "read",
-                "mmap", "malloc", "realloc", "alloca", "free", "strlen", "system",
-                "exec", "popen",
+                "memcpy", "strcpy", "strcat", "sprintf", "gets", "recv", "read", "mmap", "malloc",
+                "realloc", "alloca", "free", "strlen", "system", "exec", "popen",
             ]
             .iter()
             .map(|s| s.to_string())

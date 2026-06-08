@@ -3,7 +3,10 @@
 //! `base_url`. OpenRouter reuses this shape with extra headers (see
 //! `openrouter.rs`).
 
-use super::{client, pump, Chunk, CompletionRequest, CompletionResponse, Message, Provider, ProviderStatus, TokenUsage};
+use super::{
+    client, pump, Chunk, CompletionRequest, CompletionResponse, Message, Provider, ProviderStatus,
+    TokenUsage,
+};
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use serde_json::json;
@@ -116,7 +119,11 @@ impl Provider for OpenAiCompatible {
         })
     }
 
-    async fn stream(&self, req: CompletionRequest, tx: Sender<String>) -> Result<CompletionResponse> {
+    async fn stream(
+        &self,
+        req: CompletionRequest,
+        tx: Sender<String>,
+    ) -> Result<CompletionResponse> {
         let start = Instant::now();
         let rb = self.http.post(self.endpoint()).json(&self.body(&req, true));
         let resp = self.apply_headers(rb).send().await?;

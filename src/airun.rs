@@ -47,7 +47,10 @@ pub async fn run(ctx: &Ctx, system: String, user: String, label: &str) -> Result
             if fb.is_empty() || fb == primary {
                 return Err(e);
             }
-            ctx.ui.status(&p.paint(DIM, &format!("  primary failed ({e}); falling back to {fb}")));
+            ctx.ui.status(&p.paint(
+                DIM,
+                &format!("  primary failed ({e}); falling back to {fb}"),
+            ));
             let fallback = provider::build(cfg, fb)
                 .with_context(|| format!("building fallback provider '{fb}'"))?;
             let mut req = req;
@@ -69,7 +72,9 @@ async fn dispatch(
         let label = format!("querying {}/{}...", prov.name(), prov.model());
         let consumer = tokio::spawn(async move { stream::consume(rx, &label, spinner).await });
         let prov_res = prov.stream(req, tx).await;
-        let streamed = consumer.await.map_err(|e| anyhow!("stream consumer: {e}"))?;
+        let streamed = consumer
+            .await
+            .map_err(|e| anyhow!("stream consumer: {e}"))?;
         match prov_res {
             Ok(resp) => Ok(if resp.content.is_empty() {
                 streamed

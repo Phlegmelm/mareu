@@ -58,6 +58,24 @@ Add unit tests next to the logic (`#[cfg(test)]`) and end-to-end behavior to
 `tests/cli.rs`. Anything touching the JSON schema must keep `docs/json-schema.md`
 accurate — it's a public contract.
 
+## CI & releasing
+
+Every push/PR runs `.github/workflows/ci.yml`: build + test on Linux, macOS, and
+Windows, plus `cargo fmt --check` and `cargo clippy -- -D warnings`. Keep both
+green — run them locally before pushing.
+
+Releases are cut by pushing a version tag:
+
+```bash
+git tag v0.5.0
+git push origin v0.5.0
+```
+
+`.github/workflows/release.yml` then builds binaries for five targets
+(linux x86_64/aarch64, macOS x86_64/aarch64, windows x86_64), archives them with
+the docs/licenses and a sha256 checksum, and attaches them to a new GitHub
+Release. Bump `version` in `Cargo.toml` and update `CHANGELOG.md` first.
+
 ## Security
 
 To report a vulnerability *in Mareu itself*, see `SECURITY.md` — do not open a

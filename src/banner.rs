@@ -53,5 +53,7 @@ pub fn compact(ui: &Ui) -> String {
 pub fn suppressed(quiet: bool, stdin_piped: bool) -> bool {
     quiet
         || stdin_piped
-        || std::env::var("MAREU_NO_BANNER").map(|v| v == "1").unwrap_or(false)
+        || std::env::var("MAREU_NO_BANNER")
+            .map(|v| v == "1")
+            .unwrap_or(false)
 }

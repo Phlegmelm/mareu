@@ -62,7 +62,8 @@ pub async fn exec(ctx: &Ctx, args: &AnalyzeArgs) -> Result<i32> {
     // on the file and analyze the disassembly text instead of the raw bytes.
     let (target, content) = match &args.file {
         Some(path) if args.decompile => {
-            ctx.ui.status(&format!("  disassembling {path} (objdump)..."));
+            ctx.ui
+                .status(&format!("  disassembling {path} (objdump)..."));
             let asm = util::disassemble(path)?;
             (format!("{path} (disasm)"), asm)
         }
@@ -104,7 +105,14 @@ pub async fn exec(ctx: &Ctx, args: &AnalyzeArgs) -> Result<i32> {
 
     // AI layer.
     if ctx.ai {
-        let system = build_prompt(ctx, &result, &content, args, store.as_ref(), session_name.as_deref())?;
+        let system = build_prompt(
+            ctx,
+            &result,
+            &content,
+            args,
+            store.as_ref(),
+            session_name.as_deref(),
+        )?;
         let user = args
             .finding
             .clone()
@@ -126,7 +134,8 @@ pub async fn exec(ctx: &Ctx, args: &AnalyzeArgs) -> Result<i32> {
             }
         }
     } else if ctx.dry_run {
-        ctx.ui.status("  --dry-run has no effect without --ai (static analysis is deterministic)");
+        ctx.ui
+            .status("  --dry-run has no effect without --ai (static analysis is deterministic)");
     }
 
     // Persist to session if active.
@@ -143,9 +152,8 @@ pub async fn exec(ctx: &Ctx, args: &AnalyzeArgs) -> Result<i32> {
     let dur = start.elapsed().as_millis();
     emit_result(ctx, &result, session_name.as_deref(), dur);
 
-    // Nonzero exit when high/critical findings exist — useful in CI gates.
-    let c = result.summary_counts();
-    Ok(if c.high + c.critical > 0 { 0 } else { 0 })
+    // Findings are results, not failures: a successful analysis exits 0.
+    Ok(0)
 }
 
 fn resolve_session(_ctx: &Ctx, store: &Option<Store>, explicit: Option<&str>) -> Option<String> {
@@ -262,10 +270,14 @@ fn emit_result(ctx: &Ctx, res: &AnalysisResult, session: Option<&str>, dur: u128
             util::emit(&json::to_string(&v), false);
         }
         OutputFormat::Markdown => {
-            util::emit(&render::analysis_md(res), ctx.cfg().output.pager && !ctx.no_pager);
+            util::emit(
+                &render::analysis_md(res),
+                ctx.cfg().output.pager && !ctx.no_pager,
+            );
         }
         OutputFormat::Text => {
-            let text = render::analysis(&ctx.ui, res, ctx.provider_label().as_deref(), session, dur);
+            let text =
+                render::analysis(&ctx.ui, res, ctx.provider_label().as_deref(), session, dur);
             util::emit(&text, ctx.cfg().output.pager && !ctx.no_pager);
         }
     }

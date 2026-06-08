@@ -127,7 +127,10 @@ pub async fn exec(ctx: &Ctx, args: &ReconArgs) -> Result<i32> {
             util::emit(&json::to_string(&v), false);
         }
         OutputFormat::Markdown => {
-            util::emit(&render::recon_md(&result), ctx.cfg().output.pager && !ctx.no_pager);
+            util::emit(
+                &render::recon_md(&result),
+                ctx.cfg().output.pager && !ctx.no_pager,
+            );
         }
         OutputFormat::Text => {
             let text = render::recon(&ctx.ui, &result, ctx.provider_label().as_deref(), dur);

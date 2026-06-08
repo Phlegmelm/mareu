@@ -59,8 +59,8 @@ impl Store {
 
     pub fn load_meta(&self, name: &str) -> Result<Meta> {
         let path = self.dir(name).join("meta.toml");
-        let text = std::fs::read_to_string(&path)
-            .map_err(|_| anyhow!("no such session '{name}'"))?;
+        let text =
+            std::fs::read_to_string(&path).map_err(|_| anyhow!("no such session '{name}'"))?;
         Ok(toml::from_str(&text)?)
     }
 
@@ -118,7 +118,10 @@ impl Store {
             bail!("no such session '{name}'");
         }
         let path = self.dir(name).join("notes.md");
-        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
         writeln!(f, "- [{}] {}", Self::now(), text)?;
         Ok(())
     }
@@ -255,7 +258,10 @@ impl Store {
 
         let mut s = String::new();
         s.push_str(&format!("# Mareu Session — {}\n\n", meta.name));
-        s.push_str(&format!("- **target:** {}\n", meta.target.as_deref().unwrap_or("—")));
+        s.push_str(&format!(
+            "- **target:** {}\n",
+            meta.target.as_deref().unwrap_or("—")
+        ));
         s.push_str(&format!("- **created:** {}\n", meta.created_at));
         s.push_str(&format!("- **last active:** {}\n", meta.last_active));
         if let Some(p) = &meta.provider {
@@ -305,8 +311,7 @@ impl Store {
     /// session whose notes hold the imported document (best-effort; the export
     /// format is human-first, not a strict round-trip).
     pub fn import(&self, file: &str) -> Result<String> {
-        let text = std::fs::read_to_string(file)
-            .with_context(|| format!("reading {file}"))?;
+        let text = std::fs::read_to_string(file).with_context(|| format!("reading {file}"))?;
         // Derive a name from the first heading or the filename.
         let name = text
             .lines()
@@ -329,10 +334,9 @@ fn validate_name(name: &str) -> Result<()> {
     if name.is_empty() {
         bail!("session name cannot be empty");
     }
-    if name
-        .chars()
-        .any(|c| matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control())
-    {
+    if name.chars().any(|c| {
+        matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control()
+    }) {
         bail!("invalid session name '{name}': avoid path separators and reserved characters");
     }
     if name.starts_with('.') {

@@ -56,15 +56,15 @@ pub fn load() -> Result<Loaded> {
     let user_path = user_config_path()?;
 
     // Layer 1: compiled defaults, as a toml Value tree.
-    let mut merged = toml::Value::try_from(Config::default())
-        .context("serializing default config")?;
+    let mut merged =
+        toml::Value::try_from(Config::default()).context("serializing default config")?;
 
     // Layer 2: user config file.
     if user_path.exists() {
         let text = std::fs::read_to_string(&user_path)
             .with_context(|| format!("reading {}", user_path.display()))?;
-        let val: toml::Value = toml::from_str(&text)
-            .with_context(|| format!("parsing {}", user_path.display()))?;
+        let val: toml::Value =
+            toml::from_str(&text).with_context(|| format!("parsing {}", user_path.display()))?;
         merge(&mut merged, val);
     }
 

@@ -67,7 +67,10 @@ impl Provider for Ollama {
         if !status.is_success() {
             bail!("ollama returned {status}: {v}");
         }
-        let content = v["message"]["content"].as_str().unwrap_or_default().to_string();
+        let content = v["message"]["content"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         Ok(CompletionResponse {
             content,
             model_used: v["model"].as_str().unwrap_or(&self.model).to_string(),
@@ -76,7 +79,11 @@ impl Provider for Ollama {
         })
     }
 
-    async fn stream(&self, req: CompletionRequest, tx: Sender<String>) -> Result<CompletionResponse> {
+    async fn stream(
+        &self,
+        req: CompletionRequest,
+        tx: Sender<String>,
+    ) -> Result<CompletionResponse> {
         let start = Instant::now();
         let resp = self
             .http
@@ -142,7 +149,12 @@ fn parse_ndjson_line(line: &str) -> Chunk {
                 // Final object may still carry no content; treat as done.
                 return Chunk::Done;
             }
-            Chunk::Delta(v["message"]["content"].as_str().unwrap_or_default().to_string())
+            Chunk::Delta(
+                v["message"]["content"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .to_string(),
+            )
         }
         Err(_) => Chunk::Ignore,
     }

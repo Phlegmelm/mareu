@@ -13,8 +13,22 @@ use rustyline::{CompletionType, Config, Context, Editor, Helper};
 
 /// All slash-commands, used for completion (kept in sync with `commands::HELP`).
 const COMMANDS: &[&str] = &[
-    "/recon", "/analyze", "/scaffold", "/load", "/drop", "/context", "/note", "/clear",
-    "/prompt", "/model", "/provider", "/ai", "/save", "/export", "/help", "/exit",
+    "/recon",
+    "/analyze",
+    "/scaffold",
+    "/load",
+    "/drop",
+    "/context",
+    "/note",
+    "/clear",
+    "/prompt",
+    "/model",
+    "/provider",
+    "/ai",
+    "/save",
+    "/export",
+    "/help",
+    "/exit",
 ];
 
 /// Slash-commands whose argument is a file path.

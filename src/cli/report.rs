@@ -24,7 +24,12 @@ pub struct ReportArgs {
     pub template: Option<String>,
 
     /// Output format (markdown supported; html/pdf are not yet implemented)
-    #[arg(short = 'f', long = "format", value_name = "FMT", default_value = "markdown")]
+    #[arg(
+        short = 'f',
+        long = "format",
+        value_name = "FMT",
+        default_value = "markdown"
+    )]
     pub format: String,
 
     /// Write to a file instead of stdout
@@ -67,7 +72,8 @@ pub async fn exec(ctx: &Ctx, args: &ReportArgs) -> Result<i32> {
         match crate::airun::run(ctx, system, user, "report").await {
             Ok(text) => text.trim().to_string(),
             Err(e) => {
-                ctx.ui.status(&format!("  ai error: {e}; emitting raw material"));
+                ctx.ui
+                    .status(&format!("  ai error: {e}; emitting raw material"));
                 material
             }
         }

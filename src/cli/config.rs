@@ -42,11 +42,22 @@ pub async fn exec(ctx: &Ctx, args: &ConfigArgs) -> Result<i32> {
         }
         ConfigCmd::Set { key, value } => {
             let path = config::set_value(key, value)?;
-            println!("{} {} = {}  →  {}", p.paint(SUCCESS, "✓"), key, value, path.display());
+            println!(
+                "{} {} = {}  →  {}",
+                p.paint(SUCCESS, "✓"),
+                key,
+                value,
+                path.display()
+            );
         }
         ConfigCmd::Unset { key } => {
             let path = config::unset_value(key)?;
-            println!("{} unset {}  →  {}", p.paint(SUCCESS, "✓"), key, path.display());
+            println!(
+                "{} unset {}  →  {}",
+                p.paint(SUCCESS, "✓"),
+                key,
+                path.display()
+            );
         }
         ConfigCmd::Edit => {
             let path = config::user_config_path()?;
@@ -112,7 +123,12 @@ async fn print_providers(ctx: &Ctx) -> Result<()> {
                         s.message.unwrap_or_default(),
                         prov.model().to_string(),
                     ),
-                    None => ("?", "?", "health check failed".into(), prov.model().to_string()),
+                    None => (
+                        "?",
+                        "?",
+                        "health check failed".into(),
+                        prov.model().to_string(),
+                    ),
                 };
                 let key_c = if key == "yes" { SUCCESS } else { DIM };
                 let reach_c = if reach == "yes" { SUCCESS } else { DIM };

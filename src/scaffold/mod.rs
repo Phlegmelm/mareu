@@ -122,12 +122,7 @@ pub fn generate(req: &ScaffoldRequest) -> Result<Scaffold> {
     render_with(req, template, ext, lang)
 }
 
-fn render_with(
-    req: &ScaffoldRequest,
-    template: &str,
-    ext: &str,
-    lang: &str,
-) -> Result<Scaffold> {
+fn render_with(req: &ScaffoldRequest, template: &str, ext: &str, lang: &str) -> Result<Scaffold> {
     let mut hb = Handlebars::new();
     hb.register_escape_fn(handlebars::no_escape);
     hb.set_strict_mode(false);
@@ -163,7 +158,11 @@ fn render_with(
     let filename = format!(
         "mareu_{}_{}.{ext}",
         req.kind,
-        if slug.is_empty() { "scaffold".into() } else { slug }
+        if slug.is_empty() {
+            "scaffold".into()
+        } else {
+            slug
+        }
     );
 
     Ok(Scaffold {
@@ -231,9 +230,16 @@ fn slugify(s: &str) -> String {
 /// aggressive verb aimed at a bare hostname/URL/IP with no vuln-class framing.
 pub fn intent_block(vuln: &str) -> Option<String> {
     let low = vuln.to_ascii_lowercase();
-    let aggressive = ["pwn ", "hack ", "attack ", "own ", "break into ", "compromise "]
-        .iter()
-        .any(|v| low.contains(v));
+    let aggressive = [
+        "pwn ",
+        "hack ",
+        "attack ",
+        "own ",
+        "break into ",
+        "compromise ",
+    ]
+    .iter()
+    .any(|v| low.contains(v));
     if !aggressive {
         return None;
     }
@@ -246,10 +252,21 @@ pub fn intent_block(vuln: &str) -> Option<String> {
     }
     // If it also names a bug class / CVE, treat it as legitimate framing.
     let framed = low.contains("cve-")
-        || ["bof", "uaf", "overflow", "use-after-free", "format string", "injection",
-            "type confusion", "race", "oob", "out-of-bounds", "infoleak"]
-            .iter()
-            .any(|k| low.contains(k));
+        || [
+            "bof",
+            "uaf",
+            "overflow",
+            "use-after-free",
+            "format string",
+            "injection",
+            "type confusion",
+            "race",
+            "oob",
+            "out-of-bounds",
+            "infoleak",
+        ]
+        .iter()
+        .any(|k| low.contains(k));
     if framed {
         return None;
     }

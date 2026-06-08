@@ -27,7 +27,10 @@ impl OpenRouter {
         };
         let inner = OpenAiCompatible::new("openrouter".into(), key, model, base, timeout)?
             .with_headers(vec![
-                ("HTTP-Referer".into(), "https://github.com/phlegmelm/mareu".into()),
+                (
+                    "HTTP-Referer".into(),
+                    "https://github.com/phlegmelm/mareu".into(),
+                ),
                 ("X-Title".into(), "mareu".into()),
             ]);
         Ok(Self { inner })
@@ -39,7 +42,11 @@ impl Provider for OpenRouter {
     async fn complete(&self, req: CompletionRequest) -> Result<CompletionResponse> {
         self.inner.complete(req).await
     }
-    async fn stream(&self, req: CompletionRequest, tx: Sender<String>) -> Result<CompletionResponse> {
+    async fn stream(
+        &self,
+        req: CompletionRequest,
+        tx: Sender<String>,
+    ) -> Result<CompletionResponse> {
         self.inner.stream(req, tx).await
     }
     async fn health(&self) -> Result<ProviderStatus> {
