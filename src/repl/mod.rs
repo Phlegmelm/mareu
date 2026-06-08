@@ -324,6 +324,7 @@ async fn slash_scaffold(ctx: &Ctx, state: &State, rest: &str) {
         arch: "x86_64".into(),
         template: None,
         syntax: None,
+        egg: None,
         r#unsafe: false,
         save: false,
         session: state.session.clone(),

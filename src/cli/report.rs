@@ -94,6 +94,7 @@ fn blank_template(ctx: &Ctx, args: &ReportArgs) -> Result<String> {
         header_comment: false,
         timestamp: ctx.timestamp.clone(),
         asm_syntax: "both".into(),
+        egg: None,
     };
     Ok(scaffold::generate(&req)?.body)
 }

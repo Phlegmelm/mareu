@@ -40,6 +40,8 @@ pub struct ScaffoldRequest {
     pub timestamp: String,
     /// For `--lang asm`: nasm | gas | both.
     pub asm_syntax: String,
+    /// Egg tag (cleaned hex, no `0x`) for the egghunter artifact.
+    pub egg: Option<String>,
 }
 
 /// An additional generated file beyond the primary (e.g. the second assembler
@@ -187,6 +189,7 @@ fn generate_asm(req: &ScaffoldRequest) -> Result<Scaffold> {
         model: req.model.as_deref(),
         timestamp: &req.timestamp,
         header_comment: req.header_comment,
+        egg: req.egg.as_deref(),
     };
     let syntaxes = asm::syntaxes_from(&req.asm_syntax);
     let mut files = asm::build(&meta, &syntaxes);
@@ -306,6 +309,7 @@ mod tests {
             header_comment: true,
             timestamp: "2026-06-08".into(),
             asm_syntax: "both".into(),
+            egg: None,
         }
     }
 

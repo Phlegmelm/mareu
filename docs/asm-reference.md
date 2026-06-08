@@ -47,9 +47,27 @@ avoid a literal pool.
 
 ### `egghunter` — `access(2)`-based
 
-Scans memory for a doubled EGG tag, using `access(2)` to skip unmapped pages
-without faulting. **Verify** `__NR_access` (21 on x86_64, 33 on x86) and the
-`-EFAULT` low byte (`0xf2`) for your target. Set the EGG to your payload prefix.
+For when a small code-exec primitive must locate a larger payload elsewhere in
+memory. It scans the address space for a known **EGG** tag, using `access(2)` to
+skip unmapped pages without faulting, then jumps to what follows.
+
+How to use it:
+
+1. **Prepend the EGG twice** (back-to-back) immediately before your real
+   payload. The double tag prevents a false match on the `mov rax, EGG`
+   instruction inside the hunter itself.
+2. Set the EGG with `--egg` (no flag = a sane default):
+
+   ```bash
+   mareu scaffold --class egghunter --arch x86_64 --egg 0xdeadbeefcafef00d
+   ```
+
+   The value is hex (with or without `0x`) and is repeated to the arch tag size
+   — **8 bytes** on x86_64, **4 bytes** on x86 (so `--egg 0x41424344` becomes
+   `0x4142434441424344` on x86_64). Avoid bytes that collide with normal data,
+   and avoid NUL bytes if the egg travels through a string-copy.
+3. **Verify** `__NR_access` (21 on x86_64, 33 on x86) and the `-EFAULT` low byte
+   (`0xf2`) for your target kernel.
 
 ### `loader` — `mmap` RWX stager
 
