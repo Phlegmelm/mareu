@@ -39,6 +39,10 @@ AI layer, sessions, REPL) — **cross-platform on Linux, macOS, and Windows**
 - **Output** — colored box-drawing text, markdown, and a stable JSON schema
   (see `docs/json-schema.md`); honors `--no-color`/`NO_COLOR`/tty; streaming.
 - **Config** — 5-layer precedence, `${ENV}` interpolation, secret masking.
+- **Installers** (`setup/`) — idempotent `install.sh`/`uninstall.sh`
+  (Linux/macOS: symlink-or-copy onto PATH, bash/zsh/fish completions, man page)
+  and `install.ps1`/`uninstall.ps1` (+ `install.cmd`; Windows: user-PATH, no
+  admin, optional `-Symlink`, PowerShell completion). Both support `--dry-run`.
 - **Docs** — README, `docs/json-schema.md`, `docs/configuration.md`,
   `docs/asm-reference.md`, `SECURITY.md`, dual `LICENSE-MIT`/`LICENSE-APACHE`.
 - **Tests** — 13 unit + 6 integration tests.

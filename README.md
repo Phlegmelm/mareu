@@ -39,14 +39,29 @@ It is not a scanner. It does not run Nmap. It has no dashboard.
 
 ## Install
 
+Requires a Rust toolchain (1.74+). No system libraries beyond what `rustls`
+bundles — TLS is pure-Rust, so the same build works on all three platforms.
+
+**One-command install** (builds, puts `mareu` on PATH, installs completions + man page):
+
+```bash
+# Linux / macOS  — symlinks into ~/.local/bin
+./setup/install.sh
+
+# Windows (PowerShell) — copies into %LOCALAPPDATA% and updates user PATH
+powershell -ExecutionPolicy Bypass -File .\setup\install.ps1
+```
+
+Both are idempotent and support `--dry-run` / `-DryRun`. See
+[`setup/README.md`](setup/README.md) for flags (symlink vs copy, `--system`,
+custom dirs) and uninstall scripts.
+
+**Manual build:**
+
 ```bash
 cargo build --release
 # binary at ./target/release/mareu  (mareu.exe on Windows)
 ```
-
-Requires a Rust toolchain (1.74+). No system libraries beyond what `rustls`
-bundles — TLS is pure-Rust, so the same `cargo build` works on all three
-platforms.
 
 ---
 
