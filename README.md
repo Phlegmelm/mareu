@@ -42,6 +42,9 @@ prefer to do it yourself? `cargo build --release` and the binary plops out in `t
 # what's the attack surface here, focus on the scary pre-auth bits
 mareu recon ./src --filter pre-auth
 
+# no source? point it at a binary, it'll disassemble and find the call sites
+mareu recon ./target_binary --type binary --filter strcpy
+
 # i think THIS line is cursed, tell me about it
 cat src/parser.c | mareu analyze --finding "this memcpy looks unhinged" --cwe --cvss
 

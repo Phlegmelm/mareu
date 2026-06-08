@@ -44,34 +44,6 @@ pub struct AnalyzeArgs {
     pub session: Option<String>,
 }
 
-/// Disassemble a binary with objdump (or llvm-objdump). Returns the textual
-/// disassembly to feed into analysis/AI. Cross-platform: tries common tool
-/// names in PATH and reports clearly when none is found.
-fn disassemble(path: &str) -> Result<String> {
-    use std::process::Command;
-    let candidates = [
-        ("objdump", vec!["-d", "-M", "intel", "--no-show-raw-insn", path]),
-        ("llvm-objdump", vec!["-d", "--x86-asm-syntax=intel", path]),
-        ("gobjdump", vec!["-d", "-M", "intel", path]),
-    ];
-    let mut last_err = String::new();
-    for (tool, args) in candidates {
-        match Command::new(tool).args(&args).output() {
-            Ok(out) if out.status.success() => {
-                return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
-            }
-            Ok(out) => {
-                last_err = format!("{tool}: {}", String::from_utf8_lossy(&out.stderr).trim());
-            }
-            Err(e) => last_err = format!("{tool}: {e}"),
-        }
-    }
-    bail!(
-        "could not disassemble {path}: no working objdump in PATH ({last_err}).\n\
-         Install binutils (objdump) or LLVM (llvm-objdump), or pipe disassembly on stdin."
-    )
-}
-
 fn parse_line(spec: &str) -> Result<(usize, usize)> {
     if let Some((a, b)) = spec.split_once(':') {
         let lo: usize = a.trim().parse()?;
@@ -91,7 +63,7 @@ pub async fn exec(ctx: &Ctx, args: &AnalyzeArgs) -> Result<i32> {
     let (target, content) = match &args.file {
         Some(path) if args.decompile => {
             ctx.ui.status(&format!("  disassembling {path} (objdump)..."));
-            let asm = disassemble(path)?;
+            let asm = util::disassemble(path)?;
             (format!("{path} (disasm)"), asm)
         }
         Some(path) => {

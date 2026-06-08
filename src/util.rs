@@ -27,6 +27,34 @@ pub fn stdout_tty() -> bool {
     std::io::stdout().is_terminal()
 }
 
+/// Disassemble a binary with objdump (or llvm-objdump). Returns the textual
+/// disassembly to feed into analysis/recon/AI. Cross-platform: tries common
+/// tool names in PATH and reports clearly when none is found. Intel syntax,
+/// raw bytes suppressed.
+pub fn disassemble(path: &str) -> Result<String> {
+    let candidates = [
+        ("objdump", vec!["-d", "-M", "intel", "--no-show-raw-insn", path]),
+        ("llvm-objdump", vec!["-d", "--x86-asm-syntax=intel", path]),
+        ("gobjdump", vec!["-d", "-M", "intel", path]),
+    ];
+    let mut last_err = String::new();
+    for (tool, args) in candidates {
+        match Command::new(tool).args(&args).output() {
+            Ok(out) if out.status.success() => {
+                return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
+            }
+            Ok(out) => {
+                last_err = format!("{tool}: {}", String::from_utf8_lossy(&out.stderr).trim());
+            }
+            Err(e) => last_err = format!("{tool}: {e}"),
+        }
+    }
+    anyhow::bail!(
+        "could not disassemble {path}: no working objdump in PATH ({last_err}).\n\
+         Install binutils (objdump) or LLVM (llvm-objdump), or pipe disassembly on stdin."
+    )
+}
+
 /// Resolve the user's editor, falling back per-platform.
 pub fn editor() -> String {
     if let Ok(e) = std::env::var("VISUAL").or_else(|_| std::env::var("EDITOR")) {

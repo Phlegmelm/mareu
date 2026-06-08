@@ -327,17 +327,112 @@ pub fn recon_file(file: &str, content: &str, filter: Option<&str>, cfg: &Analysi
         }
     }
 
-    // Apply the surface filter if one was given.
-    if let Some(filter) = filter {
-        let f = filter.to_ascii_lowercase();
-        entries.retain(|e| {
-            e.kind.contains(&f)
-                || e.note.to_ascii_lowercase().contains(&f)
-                || (f.contains("pre-auth") && e.pre_auth)
-                || (f == "network" && e.kind == "network")
+    filter_entries(&mut entries, filter);
+    entries.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.line.cmp(&b.line)));
+    entries
+}
+
+/// Retain only entries matching a surface filter (kind, note substring,
+/// pre-auth, or the "network" shortcut).
+fn filter_entries(entries: &mut Vec<Entry>, filter: Option<&str>) {
+    let Some(filter) = filter else { return };
+    let f = filter.to_ascii_lowercase();
+    entries.retain(|e| {
+        e.kind.contains(&f)
+            || e.note.to_ascii_lowercase().contains(&f)
+            || (f.contains("pre-auth") && e.pre_auth)
+            || (f == "network" && e.kind == "network")
+    });
+}
+
+/// Classify a called symbol (from disassembly) into a surface category.
+fn classify_symbol(sym: &str, _cfg: &AnalysisConfig) -> Option<(&'static str, Severity, &'static str)> {
+    if NETWORK_TOKENS.iter().any(|t| sym.contains(&t.to_ascii_lowercase())) {
+        return Some(("network", Severity::High, "reads network input"));
+    }
+    if AUTH_TOKENS.iter().any(|t| sym.contains(t)) {
+        return Some(("auth-gate", Severity::Info, "auth/authz boundary"));
+    }
+    if PARSER_TOKENS.iter().any(|t| sym.contains(t)) {
+        return Some(("parser", Severity::Medium, "parses/decodes input"));
+    }
+    if let Some(class) = cwe::classify(sym) {
+        return Some(("flag-site", class.default_severity, "dangerous sink"));
+    }
+    None
+}
+
+/// Map the attack surface of a **binary** from its objdump disassembly.
+///
+/// Walks the dump tracking the enclosing function (`<addr> <name>:` headers) and
+/// surfaces `call`/PLT-`jmp` sites to interesting symbols (network, parser,
+/// auth, dangerous libc sinks), attributed to their caller.
+pub fn recon_disasm(
+    file: &str,
+    disasm: &str,
+    cfg: &AnalysisConfig,
+    filter: Option<&str>,
+) -> Vec<Entry> {
+    let mut entries = Vec::new();
+    let mut current_fn = String::from("?");
+    let mut seen = std::collections::BTreeSet::new();
+
+    for (idx, line) in disasm.lines().enumerate() {
+        let trimmed = line.trim();
+
+        // Function header: "0000000000001139 <main>:"
+        if trimmed.ends_with(">:") {
+            if let Some(s) = trimmed.find('<') {
+                current_fn = trimmed[s + 1..trimmed.len() - 2].to_string();
+            }
+            continue;
+        }
+
+        // Instruction: "  1140:\tcall   1030 <recv@plt>"
+        let Some((addr_part, instr)) = trimmed.split_once(':') else {
+            continue;
+        };
+        let instr = instr.trim();
+        let mnem = instr.split_whitespace().next().unwrap_or("");
+        if mnem != "call" && mnem != "jmp" {
+            continue;
+        }
+        // Extract the symbol inside <...>.
+        let Some(lt) = instr.rfind('<') else { continue };
+        let Some(gt_rel) = instr[lt..].find('>') else { continue };
+        let raw_sym = &instr[lt + 1..lt + gt_rel];
+        let had_plt = raw_sym.contains("@plt");
+        if mnem == "jmp" && !had_plt {
+            continue; // local jumps are control flow, not calls of interest
+        }
+        // Clean: drop @plt/@got suffix and +0x.. offset.
+        let sym: String = raw_sym.chars().take_while(|&c| c != '@' && c != '+').collect();
+        let sym_l = sym.to_ascii_lowercase();
+        if sym_l.is_empty() {
+            continue;
+        }
+        let Some((kind, severity, note_kind)) = classify_symbol(&sym_l, cfg) else {
+            continue;
+        };
+        if !seen.insert((current_fn.clone(), sym_l.clone())) {
+            continue;
+        }
+        let pre_auth = cfg
+            .pre_auth_markers
+            .iter()
+            .any(|m| current_fn.to_ascii_lowercase().contains(&m.to_ascii_lowercase()));
+        entries.push(Entry {
+            name: format!("{current_fn} → {sym}()"),
+            file: file.to_string(),
+            line: idx + 1,
+            kind: kind.to_string(),
+            pre_auth,
+            note: format!("{note_kind}: calls {sym} @ 0x{}", addr_part.trim()),
+            severity,
         });
     }
 
+    filter_entries(&mut entries, filter);
     entries.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.line.cmp(&b.line)));
     entries
 }
@@ -468,5 +563,41 @@ int parse_client_hello(int fd) {
         let cfg = AnalysisConfig::default();
         let entries = recon_file("t.c", SRC, None, &cfg);
         assert!(entries.iter().any(|e| e.kind == "network"));
+    }
+
+    #[test]
+    fn recon_disasm_attributes_calls_to_caller() {
+        let dump = "\
+0000000000001139 <parse_packet>:
+    1140:\tcall   1030 <recv@plt>
+    1150:\tcall   1040 <memcpy@plt>
+000000000000119a <main>:
+    11a0:\tcall   1050 <printf@plt>
+    11b0:\tjmp    1060 <strcpy@plt>
+";
+        let cfg = AnalysisConfig::default();
+        let entries = recon_disasm("bin", dump, &cfg, None);
+        assert!(entries
+            .iter()
+            .any(|e| e.kind == "network" && e.name.contains("parse_packet") && e.name.contains("recv")));
+        assert!(entries.iter().any(|e| e.name.contains("memcpy")));
+        assert!(entries
+            .iter()
+            .any(|e| e.name.contains("strcpy") && e.name.contains("main")));
+        // printf isn't an interesting sink → not surfaced.
+        assert!(!entries.iter().any(|e| e.name.contains("printf")));
+    }
+
+    #[test]
+    fn recon_disasm_filter_applies() {
+        let dump = "\
+0000000000001139 <handler>:
+    1140:\tcall   1030 <recv@plt>
+    1150:\tcall   1040 <strcpy@plt>
+";
+        let cfg = AnalysisConfig::default();
+        let entries = recon_disasm("bin", dump, &cfg, Some("network"));
+        assert!(entries.iter().all(|e| e.kind == "network"));
+        assert_eq!(entries.len(), 1);
     }
 }

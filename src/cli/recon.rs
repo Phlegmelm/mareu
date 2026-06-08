@@ -7,7 +7,7 @@ use crate::output::{json, render, OutputFormat};
 use crate::util;
 use anyhow::{bail, Result};
 use clap::Args;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 #[derive(Args, Debug)]
@@ -58,7 +58,22 @@ pub async fn exec(ctx: &Ctx, args: &ReconArgs) -> Result<i32> {
             if !root.exists() {
                 bail!("target does not exist: {}", root.display());
             }
-            surface::recon_tree(&root, filter, args.depth, cfg)
+            // Binary if explicitly requested, or (auto) a non-source file.
+            let binary = match args.r#type.as_deref() {
+                Some("binary") => true,
+                Some("source") | Some("protocol") => false,
+                _ => root.is_file() && !is_source_path(&root),
+            };
+            if binary {
+                if !root.is_file() {
+                    bail!("--type binary expects a single binary file, not a directory");
+                }
+                ctx.ui.status(&format!("  disassembling {t} (objdump)..."));
+                let disasm = util::disassemble(t)?;
+                (surface::recon_disasm(t, &disasm, cfg, filter), 1usize)
+            } else {
+                surface::recon_tree(&root, filter, args.depth, cfg)
+            }
         }
     };
     if scanned == 0 {
@@ -120,6 +135,13 @@ pub async fn exec(ctx: &Ctx, args: &ReconArgs) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+fn is_source_path(p: &Path) -> bool {
+    p.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| surface::SOURCE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
 }
 
 fn build_prompt(_ctx: &Ctx, res: &ReconResult) -> Result<String> {

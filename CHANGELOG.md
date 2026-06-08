@@ -25,6 +25,9 @@ AI layer, sessions, REPL) — **cross-platform on Linux, macOS, and Windows**
 - **Static analysis** — attack-surface mapping, flag-pattern scan
   (`aho-corasick`), CWE heuristics, and a light taint pass that promotes sinks
   consuming tainted input.
+- **Binary recon** — `recon --type binary` (auto-detected for non-source files)
+  disassembles via `objdump` and surfaces `call`/PLT-`jmp` sites to interesting
+  symbols, attributed to their caller function.
 - **Scaffolding** — Handlebars templates for bof/uaf/fmt/proto/reproducer/report
   with a machine-readable header and the `--unsafe` gate. Honest **intent check**
   (RFC §4.2) declines named-external-target framing.
