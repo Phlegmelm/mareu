@@ -17,6 +17,16 @@ shellcode is null-free and assemble-clean; egghunter/loader carry explicit
 `--syntax both` emits a matched pair (`.nasm` + `.s`). For non-x86 arches NASM
 does not apply, so the request collapses to a single GNU `as` (`.s`) file.
 
+**You don't need `--lang asm` for these classes.** When `--class` is one of
+`shellcode`/`egghunter`/`loader`/`ret2` (or you pass `--syntax`), the language is
+inferred as `asm`. `--type` defaults to `poc`. So the shortest form is just:
+
+```bash
+mareu scaffold --class shellcode --arch aarch64 --syntax both
+```
+
+Pass an explicit `--lang c` to override the inference.
+
 Use `--save` to write each artifact to its own file (`mareu_scaffold_<ts>/`); to
 stdout, multiple artifacts are concatenated with `// ===== filename =====`
 banners.

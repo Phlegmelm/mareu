@@ -12,7 +12,7 @@ use serde_json::json;
 #[derive(Args, Debug)]
 pub struct ScaffoldArgs {
     /// Scaffold type: poc | exploit | reproducer | harness | fuzzer | report
-    #[arg(short = 't', long = "type", value_name = "TYPE")]
+    #[arg(short = 't', long = "type", value_name = "TYPE", default_value = "poc")]
     pub r#type: String,
 
     /// Vulnerability description or CVE identifier
@@ -21,8 +21,10 @@ pub struct ScaffoldArgs {
     pub vuln: Option<String>,
 
     /// Language: c | python | rust | asm | bash
-    #[arg(short = 'l', long = "lang", value_name = "LANG", default_value = "c")]
-    pub lang: String,
+    /// (inferred as asm for shellcode/egghunter/loader/ret2 classes or when
+    /// --syntax is given; otherwise defaults to c)
+    #[arg(short = 'l', long = "lang", value_name = "LANG")]
+    pub lang: Option<String>,
 
     /// Bug class: bof | uaf | fmt | race | proto | logic | oob | infoleak
     #[arg(short = 'c', long = "class", value_name = "CLASS")]
@@ -44,9 +46,9 @@ pub struct ScaffoldArgs {
     #[arg(long = "template", value_name = "PATH")]
     pub template: Option<String>,
 
-    /// Assembler syntax for --lang asm: nasm | gas | both
-    #[arg(long = "syntax", value_name = "SYN", default_value = "both")]
-    pub syntax: String,
+    /// Assembler syntax for --lang asm: nasm | gas | both [default: both]
+    #[arg(long = "syntax", value_name = "SYN")]
+    pub syntax: Option<String>,
 
     /// Enable aggressive output modes (full exploit, ROP/shellcode stubs)
     #[arg(long = "unsafe")]
@@ -81,10 +83,15 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
     let unsafe_mode = args.r#unsafe || ctx.cfg().scaffold.unsafe_default;
     let date = ctx.timestamp.get(..10).unwrap_or(&ctx.timestamp).to_string();
 
+    // Resolve language: explicit --lang wins; otherwise infer asm from an
+    // asm-specific class or the presence of --syntax, else default to c.
+    let lang = resolve_lang(args);
+    let asm_syntax = args.syntax.clone().unwrap_or_else(|| "both".into());
+
     let req = ScaffoldRequest {
         kind: args.r#type.clone(),
         vuln: vuln.clone(),
-        lang: args.lang.clone(),
+        lang,
         class: args.class.clone(),
         arch: args.arch.clone(),
         asan: args.asan,
@@ -94,7 +101,7 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
         custom_template: args.template.clone(),
         header_comment: ctx.cfg().scaffold.header_comment,
         timestamp: date,
-        asm_syntax: args.syntax.clone(),
+        asm_syntax,
     };
 
     let mut scaffold = scaffold::generate(&req)?;
@@ -200,6 +207,31 @@ pub async fn exec(ctx: &Ctx, args: &ScaffoldArgs) -> Result<i32> {
         }
     }
     Ok(0)
+}
+
+/// Decide the scaffold language when `--lang` is omitted: infer `asm` from an
+/// asm-specific class or the presence of `--syntax`, else default to `c`.
+fn resolve_lang(args: &ScaffoldArgs) -> String {
+    if let Some(l) = &args.lang {
+        return l.clone();
+    }
+    let asm_class = args
+        .class
+        .as_deref()
+        .map(|c| {
+            matches!(
+                c.to_ascii_lowercase().as_str(),
+                "shellcode" | "execve" | "sh" | "shell" | "egghunter" | "egg"
+                    | "loader" | "stager" | "stage" | "ret2" | "rop" | "win"
+                    | "proof" | "syscall"
+            )
+        })
+        .unwrap_or(false);
+    if asm_class || args.syntax.is_some() {
+        "asm".into()
+    } else {
+        "c".into()
+    }
 }
 
 fn build_prompt(ctx: &Ctx, req: &ScaffoldRequest, template: &str, attach: &[String]) -> Result<String> {
