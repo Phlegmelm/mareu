@@ -82,6 +82,66 @@ fn scaffold_template_is_deterministic_and_runnable_shape() {
 }
 
 #[test]
+fn mcp_stdio_lists_tools_and_calls_analyze() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::Stdio;
+
+    let mut child = mareu()
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    // Write the JSON-RPC session from a thread so reading can run concurrently.
+    let mut stdin = child.stdin.take().unwrap();
+    let writer = std::thread::spawn(move || {
+        let msgs = [
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}"#,
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"mareu_analyze","arguments":{"content":"void f(){char b[8];strcpy(b,x);}"}}}"#,
+        ];
+        for m in msgs {
+            writeln!(stdin, "{m}").unwrap();
+        }
+        // Drop stdin to signal EOF so the server exits.
+    });
+
+    let stdout = child.stdout.take().unwrap();
+    let mut responses = Vec::new();
+    for line in BufReader::new(stdout).lines() {
+        let line = line.unwrap();
+        if line.trim().is_empty() {
+            continue;
+        }
+        responses.push(serde_json::from_str::<serde_json::Value>(&line).unwrap());
+        if responses.len() == 3 {
+            break;
+        }
+    }
+    writer.join().unwrap();
+    let _ = child.wait();
+
+    let by = |id: i64| responses.iter().find(|m| m["id"] == id).unwrap();
+
+    // initialize
+    assert_eq!(by(1)["result"]["serverInfo"]["name"], "mareu");
+    // tools/list — all four tools present
+    let tools = by(2)["result"]["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 4);
+    let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"mareu_analyze"));
+    assert!(names.contains(&"mareu_scaffold"));
+    // tools/call analyze — returns non-error structured content with a finding
+    let call = &by(3)["result"];
+    assert_eq!(call["isError"], false);
+    let inner: serde_json::Value =
+        serde_json::from_str(call["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert!(!inner["findings"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn dry_run_makes_no_network_call_and_prints_prompt() {
     let out = mareu()
         .args([

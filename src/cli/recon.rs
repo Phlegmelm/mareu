@@ -7,7 +7,7 @@ use crate::output::{json, render, OutputFormat};
 use crate::util;
 use anyhow::{bail, Result};
 use clap::Args;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Instant;
 
 #[derive(Args, Debug)]
@@ -32,29 +32,37 @@ pub struct ReconArgs {
     pub entry: Vec<String>,
 }
 
-const SOURCE_EXTS: &[&str] = &[
-    "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "rs", "py", "go", "js", "ts", "java", "rb", "php",
-];
-
 pub async fn exec(ctx: &Ctx, args: &ReconArgs) -> Result<i32> {
     let start = Instant::now();
-
-    // Collect the file list.
-    let files = gather_files(args)?;
-    if files.is_empty() {
-        bail!("no source files found at the given target");
-    }
-
     let cfg = &ctx.cfg().analysis;
-    let mut entries: Vec<Entry> = Vec::new();
-    let mut scanned = 0usize;
-    for f in &files {
-        let Ok(content) = std::fs::read_to_string(f) else {
-            continue;
-        };
-        scanned += 1;
-        let rel = relative(f);
-        entries.extend(surface::recon_file(&rel, &content, args.filter.as_deref(), cfg));
+    let filter = args.filter.as_deref();
+
+    // Resolve the file set and run the shared recon engine.
+    let (mut entries, scanned): (Vec<Entry>, usize) = match &args.target {
+        None => {
+            // stdin file-list mode.
+            let Some(list) = util::read_stdin() else {
+                bail!("no target given and no file list on stdin");
+            };
+            let files: Vec<PathBuf> = list
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(PathBuf::from)
+                .filter(|p| p.is_file())
+                .collect();
+            surface::recon_files(&files, filter, cfg)
+        }
+        Some(t) => {
+            let root = PathBuf::from(t);
+            if !root.exists() {
+                bail!("target does not exist: {}", root.display());
+            }
+            surface::recon_tree(&root, filter, args.depth, cfg)
+        }
+    };
+    if scanned == 0 {
+        bail!("no source files found at the given target");
     }
 
     // Honor explicitly supplied entry points by boosting matching entries.
@@ -112,74 +120,6 @@ pub async fn exec(ctx: &Ctx, args: &ReconArgs) -> Result<i32> {
         }
     }
     Ok(0)
-}
-
-fn gather_files(args: &ReconArgs) -> Result<Vec<PathBuf>> {
-    // stdin file-list mode.
-    if args.target.is_none() {
-        if let Some(list) = util::read_stdin() {
-            let files: Vec<PathBuf> = list
-                .lines()
-                .map(str::trim)
-                .filter(|l| !l.is_empty())
-                .map(PathBuf::from)
-                .filter(|p| p.is_file())
-                .collect();
-            return Ok(files);
-        }
-        bail!("no target given and no file list on stdin");
-    }
-    let root = PathBuf::from(args.target.as_ref().unwrap());
-    if root.is_file() {
-        return Ok(vec![root]);
-    }
-    if !root.exists() {
-        bail!("target does not exist: {}", root.display());
-    }
-    let mut out = Vec::new();
-    walk(&root, &root, 0, args.depth, &mut out);
-    Ok(out)
-}
-
-fn walk(root: &Path, dir: &Path, depth: usize, max: Option<usize>, out: &mut Vec<PathBuf>) {
-    if let Some(m) = max {
-        if depth > m {
-            return;
-        }
-    }
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for e in rd.flatten() {
-        let p = e.path();
-        let name = e.file_name();
-        let name = name.to_string_lossy();
-        // Skip VCS and dependency dirs that add noise.
-        if p.is_dir() {
-            if matches!(name.as_ref(), ".git" | "node_modules" | "target" | "vendor" | "build" | ".svn") {
-                continue;
-            }
-            walk(root, &p, depth + 1, max, out);
-        } else if is_source(&p) {
-            out.push(p);
-        }
-    }
-}
-
-fn is_source(p: &Path) -> bool {
-    p.extension()
-        .and_then(|e| e.to_str())
-        .map(|e| SOURCE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
-        .unwrap_or(false)
-}
-
-fn relative(p: &Path) -> String {
-    std::env::current_dir()
-        .ok()
-        .and_then(|cwd| p.strip_prefix(&cwd).ok().map(|r| r.to_path_buf()))
-        .unwrap_or_else(|| p.to_path_buf())
-        .to_string_lossy()
-        .replace('\\', "/")
 }
 
 fn build_prompt(_ctx: &Ctx, res: &ReconResult) -> Result<String> {

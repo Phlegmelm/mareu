@@ -8,6 +8,7 @@ mod banner;
 mod cli;
 mod config;
 mod context;
+mod mcp;
 mod output;
 mod provider;
 mod repl;
@@ -140,7 +141,7 @@ async fn run() -> anyhow::Result<i32> {
             // Compact banner to stderr for non-shell subcommands.
             if !banner::suppressed(g.quiet, stdin_piped)
                 && style == "full"
-                && !matches!(cli.command, Some(Commands::Shell(_)))
+                && !matches!(cli.command, Some(Commands::Shell(_)) | Some(Commands::Mcp(_)))
             {
                 eprintln!("{}", banner::compact(&ctx.ui));
             }
@@ -155,6 +156,7 @@ async fn run() -> anyhow::Result<i32> {
         Commands::Session(a) => cli::session::exec(&ctx, a).await,
         Commands::Shell(a) => cli::shell::exec(&ctx, a).await,
         Commands::Report(a) => cli::report::exec(&ctx, a).await,
+        Commands::Mcp(a) => mcp::serve(&ctx, a).await,
         Commands::Config(a) => cli::config::exec(&ctx, a).await,
         // Handled before config load.
         Commands::Completions(_) | Commands::Man(_) => unreachable!(),

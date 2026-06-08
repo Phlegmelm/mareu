@@ -13,7 +13,10 @@ AI layer, sessions, REPL) — **cross-platform on Linux, macOS, and Windows**
 ### Added
 
 - **CLI surface** (`clap` derive): `recon`, `analyze`, `scaffold`, `session`,
-  `shell`, `report`, `config`, `banner`, `completions`, `man`.
+  `shell`, `report`, `mcp`, `config`, `banner`, `completions`, `man`.
+- **MCP server** (`mareu mcp`) — JSON-RPC 2.0 over stdio exposing
+  `mareu_recon`, `mareu_analyze`, `mareu_scaffold`, `mareu_session_context` as
+  tools for Claude Code (RFC §13.4). See `docs/mcp.md`. (HTTP transport pending.)
 - **Opt-in AI layer** — global `--ai` / `--no-ai` / `--dry-run`; AI is never the
   default. `--dry-run` prints the fully assembled prompt and makes no API call.
 - **Providers** (real `reqwest` impls, streaming): OpenRouter, Anthropic,
@@ -57,8 +60,8 @@ AI layer, sessions, REPL) — **cross-platform on Linux, macOS, and Windows**
 ### Known limitations
 
 - `report` supports markdown only (html/pdf pending).
-- MCP server mode (RFC §13.4) and the ambient Claude-Code provider are not yet
-  implemented (RFC v0.5).
+- MCP server uses stdio; the HTTP/SSE transport (`--port`) and the ambient
+  Claude-Code provider are not yet implemented (RFC v0.5).
 - REPL tab-completion is basic (history + reverse-search).
 - egghunter/loader asm are correct-by-shape scaffolds requiring on-target
   syscall/badchar verification, per the SCAFFOLD contract.

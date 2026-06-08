@@ -10,6 +10,12 @@ use super::cwe;
 use super::{AnalysisResult, Entry, Finding, Origin, Severity};
 use crate::config::AnalysisConfig;
 use aho_corasick::AhoCorasick;
+use std::path::{Path, PathBuf};
+
+/// Source file extensions recon will scan when walking a tree.
+pub const SOURCE_EXTS: &[&str] = &[
+    "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "rs", "py", "go", "js", "ts", "java", "rb", "php",
+];
 
 /// Tokens that indicate the code reads from the network.
 const NETWORK_TOKENS: &[&str] = &[
@@ -334,6 +340,81 @@ pub fn recon_file(file: &str, content: &str, filter: Option<&str>, cfg: &Analysi
 
     entries.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.line.cmp(&b.line)));
     entries
+}
+
+/// Run recon over an explicit list of files. Returns (sorted entries, files
+/// actually read).
+pub fn recon_files(files: &[PathBuf], filter: Option<&str>, cfg: &AnalysisConfig) -> (Vec<Entry>, usize) {
+    let mut entries = Vec::new();
+    let mut scanned = 0usize;
+    for f in files {
+        if let Ok(content) = std::fs::read_to_string(f) {
+            scanned += 1;
+            entries.extend(recon_file(&relative(f), &content, filter, cfg));
+        }
+    }
+    entries.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.line.cmp(&b.line)));
+    (entries, scanned)
+}
+
+/// Run recon over a path: a single file, or a source tree walked to `depth`.
+pub fn recon_tree(
+    root: &Path,
+    filter: Option<&str>,
+    depth: Option<usize>,
+    cfg: &AnalysisConfig,
+) -> (Vec<Entry>, usize) {
+    if root.is_file() {
+        return recon_files(&[root.to_path_buf()], filter, cfg);
+    }
+    let mut files = Vec::new();
+    walk(root, 0, depth, &mut files);
+    recon_files(&files, filter, cfg)
+}
+
+/// Recursively collect source files, skipping VCS/dependency/build dirs.
+pub fn walk(dir: &Path, depth: usize, max: Option<usize>, out: &mut Vec<PathBuf>) {
+    if let Some(m) = max {
+        if depth > m {
+            return;
+        }
+    }
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = e.file_name();
+        let name = name.to_string_lossy();
+        if p.is_dir() {
+            if matches!(
+                name.as_ref(),
+                ".git" | "node_modules" | "target" | "vendor" | "build" | ".svn"
+            ) {
+                continue;
+            }
+            walk(&p, depth + 1, max, out);
+        } else if is_source(&p) {
+            out.push(p);
+        }
+    }
+}
+
+fn is_source(p: &Path) -> bool {
+    p.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| SOURCE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// Path relative to the CWD when possible, with forward slashes for display.
+pub fn relative(p: &Path) -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| p.strip_prefix(&cwd).ok().map(|r| r.to_path_buf()))
+        .unwrap_or_else(|| p.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 #[cfg(test)]

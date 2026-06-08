@@ -60,6 +60,8 @@ mareu analyze src/tls.c --output json | jq .findings
 
 yes it generates exploit-y scaffolding. yes including **assembly** — null-free `execve` shellcode and friends for x86_64/x86/aarch64 in both nasm and gas flavors. it'll even spit out both at once. it does NOT write "pwn my-ex's-startup.com" malware though; ask it nicely about a *bug class* instead and it'll happily oblige. (it's principled, not a coward. there's a difference, we wrote it down in [`SECURITY.md`](SECURITY.md).)
 
+oh and it speaks **MCP**, so Claude Code can call it as tools mid-audit (`mareu mcp`). your robot can now make my gremlin do recon for it. teamwork. [`docs/mcp.md`](docs/mcp.md) has the setup.
+
 ## the boring (good) docs
 
 when you actually need real words instead of jokes:
@@ -67,6 +69,7 @@ when you actually need real words instead of jokes:
 - 📦 [`docs/json-schema.md`](docs/json-schema.md) — the `--output json` contract, for tooling + Claude Code
 - ⚙️ [`docs/configuration.md`](docs/configuration.md) — every knob, every env var, how it all resolves
 - 💀 [`docs/asm-reference.md`](docs/asm-reference.md) — the assembly scaffolds in detail
+- 🤖 [`docs/mcp.md`](docs/mcp.md) — running as an MCP server for Claude Code
 - 🛠️ [`setup/README.md`](setup/README.md) — install/uninstall flags
 - 📝 [`CHANGELOG.md`](CHANGELOG.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md)
 

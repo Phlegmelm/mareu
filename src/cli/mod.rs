@@ -86,6 +86,8 @@ pub enum Commands {
     Shell(shell::ShellArgs),
     /// Generate a disclosure-ready report from a session or stdin
     Report(report::ReportArgs),
+    /// Run as an MCP server (stdio) so Claude Code can call Mareu as tools
+    Mcp(McpArgs),
     /// Configuration management
     Config(config::ConfigArgs),
     /// Print the banner (and cycle styles)
@@ -109,6 +111,17 @@ pub struct ManArgs {
     /// when omitted)
     #[arg(long = "dir", value_name = "DIR")]
     pub dir: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct McpArgs {
+    /// Serve over HTTP on this port instead of stdio (not yet implemented)
+    #[arg(long = "port", value_name = "PORT")]
+    pub port: Option<u16>,
+
+    /// Default session for `mareu_session_context` when none is named
+    #[arg(short = 's', long = "session", value_name = "NAME")]
+    pub session: Option<String>,
 }
 
 #[derive(Args, Debug)]
