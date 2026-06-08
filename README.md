@@ -1,6 +1,6 @@
 # Mareu
 
-**A terminal utility for vulnerability research, exploit development, and security tooling.**
+**a lil terminal gremlin for finding bugs in other people's code (with permission, obviously).**
 
 ```
   ███╗   ███╗ █████╗ ██████╗ ███████╗██╗   ██╗
@@ -11,242 +11,73 @@
   ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝
 ```
 
-Mareu accelerates the three phases of vulnerability research that consume the
-most time: attack-surface mapping, root-cause analysis, and PoC scaffolding. It
-lives in your shell, reads your code, and does one thing per invocation. It can
-optionally use a language model — but that is a flag you pass (`--ai`), not a
-mode you are put in.
+okay so. you know that feeling when you're staring at 40,000 lines of C and somewhere in there is a `memcpy` that's gonna ruin somebody's whole week? Mareu finds that `memcpy`. it lives in your terminal, it reads your code, it does one (1) thing per command and then it shuts up. revolutionary, i know.
 
-It is not a scanner. It does not run Nmap. It has no dashboard.
+it is **not** a scanner. it does not run nmap. it does not have a dashboard. if you wanted a dashboard go open jira and be sad over there.
 
-> This implementation covers RFC-0001 milestones **v0.1–v0.4** (offline core,
-> AI layer, sessions, REPL) and runs on **Linux, macOS, and Windows**.
+## the vibe
 
----
+- **does one thing, pipes anywhere.** stdin in, stdout out, exits angry on failure. true unix gremlin behavior.
+- **the AI is OPT-IN.** `mareu analyze foo.c` does NOT phone a robot. you have to literally ask for the robot with `--ai`. we will not sneak a robot into your air-gapped lab. that's just rude.
+- **works completely offline.** no internet? no problem. the robot is optional seasoning, not the meal.
+- **treats you like an adult.** no "are you sure?", no "please consult a professional." you ARE the professional. go forth.
 
-## Design principles (RFC §2)
-
-- **The Unix contract.** Reads stdin, writes stdout, exits nonzero on failure.
-  Every subcommand is independently useful and pipeable.
-- **Transparency over magic.** `--dry-run` prints the exact assembled prompt
-  before anything leaves your machine. No telemetry. No hidden heuristics.
-- **Offline-first.** The static core (recon, analyze, scaffold templates,
-  sessions) works with **no network access**. AI is additive.
-- **Competence assumed.** No disclaimers, no hand-holding. Built for people who
-  are the professional.
-
----
-
-## Install
-
-Requires a Rust toolchain (1.74+). No system libraries beyond what `rustls`
-bundles — TLS is pure-Rust, so the same build works on all three platforms.
-
-**One-command install** (builds, puts `mareu` on PATH, installs completions + man page):
+## just gimme the thing
 
 ```bash
-# Linux / macOS  — symlinks into ~/.local/bin
+# linux / mac (symlinks it onto your PATH, sets up completions, the works)
 ./setup/install.sh
 
-# Windows (PowerShell) — copies into %LOCALAPPDATA% and updates user PATH
+# windows (no admin needed, it's polite)
 powershell -ExecutionPolicy Bypass -File .\setup\install.ps1
 ```
 
-Both are idempotent and support `--dry-run` / `-DryRun`. See
-[`setup/README.md`](setup/README.md) for flags (symlink vs copy, `--system`,
-custom dirs) and uninstall scripts.
+both are idempotnet (safe to run a million times) and have a `--dry-run` so you can chicken out and just *look*. full deets + uninstall in [`setup/README.md`](setup/README.md).
 
-**Manual build:**
+prefer to do it yourself? `cargo build --release` and the binary plops out in `target/release`. that's it. rustls means no openssl nightmares, works the same on all three OSes, no you don't have to fight a C compiler.
 
-```bash
-cargo build --release
-# binary at ./target/release/mareu  (mareu.exe on Windows)
-```
-
----
-
-## Quick start
+## stuff you can type at it
 
 ```bash
-# Map the attack surface of a tree, focused on pre-auth paths (no AI, offline)
+# what's the attack surface here, focus on the scary pre-auth bits
 mareu recon ./src --filter pre-auth
 
-# Pipe a file into root-cause analysis with CWE + CVSS
-cat src/parser.c | mareu analyze --finding "missing bounds check before memcpy" --cwe --cvss
+# i think THIS line is cursed, tell me about it
+cat src/parser.c | mareu analyze --finding "this memcpy looks unhinged" --cwe --cvss
 
-# Line-focused analysis
-mareu analyze src/parser.c --line 247
+# gimme a crash reproducer, no robot, just templates
+mareu scaffold --type reproducer --class uaf --vuln "that ksmbd thing"
 
-# Generate a UAF crash reproducer with ASAN (template, offline)
-mareu scaffold --type reproducer --class uaf --vuln "CVE-2026-XXXX ksmbd" --asan
-
-# Machine-readable output for tooling / Claude Code / jq
-mareu analyze src/tls.c --line 312 --cwe --output json | jq .findings
-
-# Turn on AI assistance (requires a configured provider)
+# robots ON (you asked for it)
 mareu analyze src/parser.c --line 247 --ai
 
-# Inspect exactly what would be sent — nothing leaves the machine
+# show me EXACTLY what you'd send the robot before you send it. trust no one.
 mareu analyze src/parser.c --line 247 --ai --dry-run
+
+# json for when a script (or a Claude) is reading instead of a human
+mareu analyze src/tls.c --output json | jq .findings
 ```
+
+yes it generates exploit-y scaffolding. yes including **assembly** — null-free `execve` shellcode and friends for x86_64/x86/aarch64 in both nasm and gas flavors. it'll even spit out both at once. it does NOT write "pwn my-ex's-startup.com" malware though; ask it nicely about a *bug class* instead and it'll happily oblige. (it's principled, not a coward. there's a difference, we wrote it down in [`SECURITY.md`](SECURITY.md).)
+
+## the boring (good) docs
+
+when you actually need real words instead of jokes:
+
+- 📦 [`docs/json-schema.md`](docs/json-schema.md) — the `--output json` contract, for tooling + Claude Code
+- ⚙️ [`docs/configuration.md`](docs/configuration.md) — every knob, every env var, how it all resolves
+- 💀 [`docs/asm-reference.md`](docs/asm-reference.md) — the assembly scaffolds in detail
+- 🛠️ [`setup/README.md`](setup/README.md) — install/uninstall flags
+- 📝 [`CHANGELOG.md`](CHANGELOG.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md)
+
+theres a `mareu --help` too. and `mareu <command> --help`. it's a whole thing.
+
+## the fine print but make it quick
+
+dual-licensed [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), pick your fighter.
+
+be cool: get authorization, follow coordinated disclosure, don't be the reason we can't have nice tools. Mareu assumes you already know this because you're not a menace. the slightly-more-serious version is in [`SECURITY.md`](SECURITY.md) — it's also where you yell at us if *Mareu itself* has a bug (privately! don't open a public issue, c'mon).
 
 ---
 
-## The AI layer is opt-in (RFC §3)
-
-`mareu analyze foo.c` runs **only** deterministic static analysis. `--ai` calls
-the configured provider. AI-sourced content is rendered in a visually distinct
-`[AI]` block so you always know which parts came from inference.
-
-| Flag | Effect |
-|------|--------|
-| `--ai` | Enable the AI layer for this invocation |
-| `--no-ai` | Hard-disable AI even if `ai.default = true` (scripting escape hatch) |
-| `--dry-run` | Print the assembled prompt + context, make **no** API call |
-
-Set `ai.default = true` in config to flip the default; `--no-ai` still overrides
-per-invocation.
-
-### Providers (RFC §8)
-
-| Provider | Key | Notes |
-|----------|-----|-------|
-| `openrouter` | `OPENROUTER_API_KEY` | Routes to Claude, GPT, Gemini, Mistral, … |
-| `anthropic` | `ANTHROPIC_API_KEY` | Direct Messages API |
-| `openai` | `OPENAI_API_KEY` | Any OpenAI-compatible endpoint via `base_url` |
-| `ollama` | — | Local, keyless, **works air-gapped** (the default) |
-
-```bash
-mareu config providers          # key status + reachability for every provider
-mareu config set provider.default openrouter
-mareu config set ai.default true
-```
-
-The default provider is `ollama` so a fresh install is fully functional offline.
-
----
-
-## Subcommands (RFC §9)
-
-| Command | Purpose |
-|---------|---------|
-| `mareu recon <target>` | Map attack surface of a source tree or file |
-| `mareu analyze [file]` | Root-cause analysis (stdin or file) |
-| `mareu scaffold` | Generate PoC / exploit / reproducer / report scaffolding |
-| `mareu session` | Manage named research sessions |
-| `mareu shell` | Interactive REPL for sustained work |
-| `mareu report` | Disclosure-ready report from a session or stdin |
-| `mareu config` | Configuration management |
-| `mareu banner` | Print the banner (cycle styles) |
-| `mareu completions <shell>` | Shell completion script (bash/zsh/fish/powershell/elvish) |
-| `mareu man [--dir D]` | Generate man page(s) |
-
-Run `mareu <cmd> --help` for the full flag surface.
-
-```bash
-# Binary analysis via objdump
-mareu analyze ./target_binary --decompile --ai
-
-# Shell completions
-mareu completions bash > /etc/bash_completion.d/mareu
-mareu completions powershell | Out-String | Invoke-Expression   # Windows
-```
-
-### Scaffolding & the honest policy (RFC §4)
-
-Mareu generates real, runnable starting points per bug class (BOF, UAF, format
-string, protocol fuzzers, crash reproducers, disclosure reports). Every artifact
-carries a machine-readable header stating what it is, what was assumed, and
-whether AI touched it.
-
-- `--unsafe` unlocks aggressive output (full exploit scaffolds, ROP/shellcode
-  stubs). Without it you get crash reproducers, sanitizer harnesses, and offset
-  tooling. The distinction is logged in the header.
-- The **intent check** declines requests framed as "attack this named external
-  host" (e.g. `--vuln "pwn target.victim.com"`) — reframe in terms of the bug
-  class and it proceeds. See `SECURITY.md`.
-
-```bash
-# Crash-level (no --unsafe)
-mareu scaffold --type poc --class bof --vuln "stack overflow in verify_pac_checksums"
-
-# Full exploit scaffold (gated)
-mareu scaffold --type exploit --class bof --vuln "stack overflow in verify_pac_checksums" --unsafe --ai
-```
-
-#### Assembly scaffolds (`--lang asm`)
-
-Generated programmatically (correct by construction), not from `.hbs` templates.
-Artifacts are selected by `--class`: `shellcode` (null-free `execve("/bin/sh")`),
-`egghunter` (access(2)-based), `loader` (mmap-RWX stager), `ret2` (proof/`win`
-stub). `--arch` picks `x86_64` (default), `x86`, or `aarch64`. `--syntax` picks
-`nasm`, `gas`, or `both` (default — emits a matched `.nasm` + `.s` pair; non-x86
-arches collapse to GNU `as`).
-
-```bash
-# null-free x86_64 execve shellcode in NASM/Intel and GNU as/AT&T
-mareu scaffold --type exploit --class shellcode --lang asm --unsafe --save
-
-# aarch64 variant (GNU as)
-mareu scaffold --type exploit --class shellcode --lang asm --arch aarch64 --unsafe
-```
-
-There is **no silent fallback**: asking for an offline language with no template
-(e.g. `--lang rust` without `--ai`) is a clear error, not C mislabeled as Rust.
-
----
-
-## Sessions & the REPL (RFC §9.4–§9.5, §12)
-
-Sessions are flat, human-readable, git-friendly files under the platform data
-directory (`%APPDATA%\mareu` / `~/Library/Application Support/mareu` /
-`~/.local/share/mareu`).
-
-```bash
-mareu session new ksmbd --target ./ksmbd
-mareu shell --session ksmbd --ai     # sustained work with /slash-commands
-mareu session export ksmbd > report.md
-```
-
-In the REPL: `/recon`, `/analyze`, `/scaffold`, `/load`, `/context`, `/ai`,
-`/model`, `/provider`, `/prompt`, `/note`, `/export`, `/help`, `/exit`.
-
----
-
-## Configuration (RFC §10)
-
-Resolution order (later wins): compiled defaults → user config → `./.mareu.toml`
-→ `MAREU_*` env vars → CLI flags. `config/default.toml` documents every key.
-
-```bash
-mareu config show         # fully resolved config (secrets masked)
-mareu config edit         # open the user config in $EDITOR
-```
-
-API keys support `${ENV_VAR}` interpolation and are never printed by
-`config show`.
-
----
-
-## Output (RFC §5, §14)
-
-`--output text` (default, boxed + colored) · `markdown` · `json`. Color respects
-`--no-color` and the `NO_COLOR` standard and auto-disables when stdout is not a
-terminal, so pipes stay clean. AI output streams by default (`--no-stream` to
-buffer).
-
----
-
-## Documentation
-
-- [`docs/json-schema.md`](docs/json-schema.md) — the stable `--output json` API contract
-- [`docs/configuration.md`](docs/configuration.md) — every config key + precedence
-- [`docs/asm-reference.md`](docs/asm-reference.md) — assembly scaffold reference
-- [`CHANGELOG.md`](CHANGELOG.md) · [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`SECURITY.md`](SECURITY.md)
-
-## License
-
-Dual-licensed under [MIT](LICENSE-MIT) OR [Apache-2.0](LICENSE-APACHE), at your option.
-
-See [`SECURITY.md`](SECURITY.md) for the responsible-disclosure statement and how
-to report a vulnerability in Mareu itself.
+*built in rust so it still compiles in 2036 when the rest of your toolchain has bit-rotted into dust. you're welcome.*
